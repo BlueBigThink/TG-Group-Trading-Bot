@@ -5,4 +5,7 @@ System : Ubuntu
 Python : 3.10.12
 
 sudo apt update
+
 sudo apt install pkg-config
+
+sudo apt install libmysqlclient-dev
