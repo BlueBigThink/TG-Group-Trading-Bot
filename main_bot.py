@@ -8,20 +8,28 @@ import logging
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder
 
-from tg_bot_app.models import UserModel
 from tg_bot_app.views import MnemonicManager, UserManager
 from dotenv import load_dotenv
 
 mnemonicManager = MnemonicManager()
+userManager = UserManager()
 
 async def start(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_user.id
-    user_name=update.effective_user.username
-    first_name=update.effective_user.first_name,
-    last_name=update.effective_user.last_name,
-    real_name=f"{first_name} {last_name}"
+    user = update.effective_user
+    userInfo = update.message.from_user
+    user_name = userInfo['username']
+    user_id = userInfo['id']
+    first_name = userInfo['first_name']
+    last_name = userInfo['last_name']
+    real_name = "{} {}".format(first_name, last_name)
+    is_bot = userInfo['is_bot']
+    if is_bot :
+        await update.message.reply_text(f"Bot can't join this channel!") #TODO kick off dangerous user
+        return
 
-    await update.message.reply_text(f'Welcome {user_data.first_name}!')
+    await sync_to_async(userManager.init)(user_id, user_name, real_name)
+
+    await update.message.reply_text(f'Welcome {user_name}!')
 
     # try:
     #     user_data = await sync_to_async(User.objects.get)(user_id=user_id)
