@@ -1,38 +1,78 @@
 from django.shortcuts import render
+from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
+from .models import MnemonicModel
+from typing import Tuple
 
-def generateMnemonic():
-    pass
-# from bip44 import Wallet
-# from mnemonic import Mnemonic
+def generate_wallet_ETH(mnemonic : str, index : int) -> Tuple[str, str]:
+    eth_private_key     = 'Ethereum Private Key'
+    eth_public_key      = '0xETHEREUMWALLETADDRESS'
+    return eth_private_key, eth_public_key
 
-# # Generate a random mnemonic (seed phrase)
-# mnemo = Mnemonic("english")
-# seed_phrase = mnemo.generate(strength=128)
-# print("Seed Phrase:", seed_phrase)
+def generate_wallet_SOL(mnemonic : str, index : int) -> Tuple[str, str]:
+    sol_private_key     = 'SOLANA Private Key'
+    sol_public_key      = 'SOALANAWALLETADDRESS'
+    return sol_private_key, sol_public_key
 
-# # Create a wallet from the seed phrase
-# wallet = Wallet(seed_phrase)
+def generate_mnemonic() -> str:
+    mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24)
+    return str(mnemonic)
 
-# # Generate multiple Ethereum addresses
-# number_of_addresses = 5
-# for i in range(number_of_addresses):
-#     account = wallet.derive_path(f"m/44'/60'/0'/0/{i}")
-#     private_key = account.private_key.hex()
-#     address = account.address()
-#     print(f"Address {i+1}:")
-#     print("  Private Key:", private_key)
-#     print("  Ethereum Address:", address)
+######################################################################################
+################################ 1. MnemonicManager ##################################
+######################################################################################
+class MnemonicManager():
+    def __init__(self) -> None:
+        self.index_key = -1
+        pass
 
-# Explanation
-# Mnemonic Seed Phrase: This script generates a mnemonic seed phrase, which is a human-readable form of the seed used to generate the master key of an HD wallet.
+    def _is_exist_mnemonic(self) -> bool:
+        return MnemonicModel.objects.filter(mnemonic__isnull=False).exists()
 
-# Wallet Creation: We create an HD wallet from the mnemonic using the Wallet class from the bip44 library. This wallet can derive multiple addresses.
+    def _read_mnemonic(self) -> str:
+        if self._is_exist_mnemonic():
+            mnemonics = MnemonicModel.objects.all()
+            return mnemonics[0].mnemonic
+        else:
+            print('-- MnemonicManager >> Failed to read mnemonic --')
+            return None
 
-# Derivation Path: The path "m/44'/60'/0'/0/{i}" follows the BIP44 standard for Ethereum:
+    def _create_admin_wallet(self) -> None:
+        try :
+            mnemonic_data = generate_mnemonic()
+            eth_private, eth_public = generate_wallet_ETH(mnemonic_data, 0)
+            sol_private, sol_public = generate_wallet_SOL(mnemonic_data, 0)
+            mnemonic =  MnemonicModel.objects.create(
+                            mnemonic=mnemonic_data, 
+                            index_key=0, 
+                            eth_public_key=eth_public, 
+                            eth_private_key=eth_private, 
+                            sol_public_key=sol_public, 
+                            sol_private_key=sol_private
+                        )
+            mnemonic.save()
+            print('-- MnemonicManager >> Admin wallet created --')
+        except Exception as e:
+            print(f'-- MnemonicManager >> Failed to create admin wallet {e} --')
 
-# "44'" is the purpose code for BIP44.
-# "60'" is the coin type for Ethereum.
-# "0'" is the account number.
-# "0" is the external chain (as opposed to the change chain).
-# "{i}" allows us to derive different addresses (0, 1, 2, ...).
-# Generating Addresses: By iterating over a range, we derive multiple addresses using different indices.
+    def init(self) -> None:
+        if self._is_exist_mnemonic():
+            print('-- MnemonicManager >> Mnemonic exist --')
+        else:
+            self._create_admin_wallet()
+######################################################################################
+################################ 2. MnemonicManager ##################################
+######################################################################################
+class UserManager():
+    def __init__(self) -> None:
+        pass
+
+    def is_exist_user(self, user_id: int) -> bool:
+        return User.objects.filter(user_id=user_id).exists()
+
+    def register_user(self, user_id : int, user_name : str, real_name : str) -> None:
+        if self.is_exist_user(user_id):
+            print(f"-- UserManager >> {real_name} exist --")
+
+            pass
+        else:
+            pass
