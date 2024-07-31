@@ -7,7 +7,7 @@ def generate_wallet_ETH(mnemonic : str, index : int) -> Tuple[str, str]:
     seed_bytes = Bip39SeedGenerator(mnemonic).Generate()
     bip44_eth_ctx = Bip44.FromSeed(seed_bytes, Bip44Coins.ETHEREUM)
 
-    eth_acc = bip44_eth_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
+    eth_acc = bip44_eth_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(index)
     eth_address = eth_acc.PublicKey().ToAddress()
     eth_private_key = eth_acc.PrivateKey().Raw().ToHex()
 
@@ -20,7 +20,7 @@ def generate_wallet_SOL(mnemonic : str, index : int) -> Tuple[str, str]:
     seed_bytes = Bip39SeedGenerator(mnemonic).Generate()
     bip44_sol_ctx = Bip44.FromSeed(seed_bytes, Bip44Coins.SOLANA)
 
-    sol_acc = bip44_sol_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
+    sol_acc = bip44_sol_ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(index)
     sol_private_key = sol_acc.PrivateKey().Raw().ToBytes()
     sol_keypair = Keypair.from_seed(sol_private_key)
 

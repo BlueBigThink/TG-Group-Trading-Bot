@@ -48,9 +48,9 @@ class MnemonicManager():
 
     def update_index_key(self, index : int) -> None:
         if self._is_exist_mnemonic():
-            mnemonics = MnemonicModel.objects.all()
-            mnemonics[0].index_key = index
-            mnemonics[0].save()
+            mnemonics = MnemonicModel.objects.all().first()
+            mnemonics.index_key = index
+            mnemonics.save()
         else:
             print('-- MnemonicManager >> Failed to update index_key --')
 
@@ -95,6 +95,18 @@ class UserManager():
             user = UserModel.objects.get(user_id=user_id)
             return user.account_lock
         return False
+
+    def user_unlock(self, user_id : int) -> None:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            user.account_lock = False
+            user.save()
+
+    def user_lock(self, user_id : int) -> None:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            user.account_lock = True
+            user.save()
 
     def get_user_balance(self, user_id : int) -> Tuple[float, float, float, float]:
         if self._is_exist_user(user_id):
