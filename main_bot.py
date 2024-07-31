@@ -12,8 +12,9 @@ from telegram import (
     CallbackQuery,
     KeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardMarkup
+    ReplyKeyboardMarkup,
 )
+from telegram.constants import ParseMode
 from telegram.ext import (
     Updater,
     ContextTypes,
@@ -39,7 +40,9 @@ mnemonicManager = MnemonicManager()
 userManager = UserManager()
 
 MAIN = range(1)
-
+########################################################################
+#                        start (Entry Point)                           #
+########################################################################
 async def start(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     userInfo = update.message.from_user
@@ -54,16 +57,29 @@ async def start(update: Update, context: CallbackContext) -> None:
         return
 
     await sync_to_async(userManager.init)(user_id, user_name, real_name)
+    isLock = await sync_to_async(userManager.get_user_lock)(user_id)
+    str_lock_status = "ACCOUNT LOCKED! 🔒"
+    if not None and not isLock:
+        str_lock_status = "ACCOUNT UNLOCKED! 🔓"
     keyboard = [
         [
-            KeyboardButton("Profile"),
-        ]
+            KeyboardButton("⬇️ Deposit"),
+            KeyboardButton("💳 Balance"),
+            KeyboardButton("⬆️ Withdraw"),
+        ],
+        [
+            KeyboardButton("⚙️ Setting"),
+            KeyboardButton("🔁 Trade"),
+        ],
+        [
+            KeyboardButton("👤 Admin"),
+        ],
     ]
     # reply_inline_markup = InlineKeyboardMarkup(keyboard)
     reply_keyboard_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text(
-        f'Welcome {user_name}! ',
-        # reply_markup=reply_inline_markup
+        f'Welcome *{real_name}*!\n\n{str_lock_status}\n\nChange status 🫴   ⚙️ Setting',
+        # parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=reply_keyboard_markup
     )
     return MAIN
@@ -90,17 +106,25 @@ async def _func_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 ########################################################################
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:    
     text = update.message.text
-
-    if text == 'Profile':
-        keyboard = [
-            [
-                InlineKeyboardButton("OK", callback_data="OK"),
-            ]
-        ]
-        await update.message.reply_text(
-            "Your profile",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    userInfo = update.message.from_user
+    user_id = userInfo['id']
+    match text:
+        case '⬇️ Deposit':
+            eth_wallet, sol_wallet = await sync_to_async(userManager.get_user_wallet)(user_id)
+            await update.message.reply_text(
+                f"*ETH :*\n👉 `{eth_wallet}`\n*SOL :*\n👉 `{sol_wallet}`",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        case '💳 Balance':
+            eth, sol, profit_eth, profit_sol = await sync_to_async(userManager.get_user_balance)(user_id)
+            sEth = str(eth).replace('.', '\.')
+            sSol = str(sol).replace('.', '\.')
+            sProfit_eth = str(profit_eth).replace('.', '\.')
+            sProfit_sol = str(profit_sol).replace('.', '\.')
+            await update.message.reply_text(
+                f"*💵 Balance :*\n ETH : {sEth}\n SOL : {sSol}\n*💸 Profit :*\n ETH : {sProfit_eth}\n SOL : {sProfit_sol}",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
 
 ########################################################################
 #                                 +End                                 #
@@ -114,6 +138,9 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     return ConversationHandler.END
 
+########################################################################
+#                           Main Function                              #
+########################################################################
 def main() -> None:
     mnemonicManager.init()
     load_dotenv()
@@ -122,8 +149,9 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MAIN: [ CallbackQueryHandler(_func_profile, pattern="Profile"),
-                    MessageHandler(filters.TEXT, _handle_message)],            
+            MAIN: [CallbackQueryHandler(_func_profile, pattern="Profile"),
+                   CallbackQueryHandler(start, pattern="Home"),
+                   MessageHandler(filters.TEXT, _handle_message)],            
         },
         fallbacks=[CommandHandler("end", end)],
         allow_reentry=True,

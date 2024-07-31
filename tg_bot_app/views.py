@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from .models import MnemonicModel, UserModel
 from .utils import generate_wallet_ETH, generate_wallet_SOL, generate_mnemonic
-
+from typing import Tuple
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
@@ -83,6 +83,25 @@ class UserManager():
         user.save()
         print(f"-- UserManager >> {real_name} created --")
     
+    def get_user_wallet(self, user_id : int) -> Tuple[str, str]:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.eth_public_key, user.sol_public_key
+        else:
+            return None, None
+
+    def get_user_lock(self, user_id : int) -> bool:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.account_lock
+        return False
+
+    def get_user_balance(self, user_id : int) -> Tuple[float, float, float, float]:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol
+        return None, None, None, None
+
     def init(self, user_id : int, user_name : str, real_name : str) -> bool:
         if self._is_exist_user(user_id):
             print(f"-- UserManager >> {real_name} exist --")
