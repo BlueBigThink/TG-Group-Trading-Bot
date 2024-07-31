@@ -1,40 +1,16 @@
 from django.shortcuts import render
-from bip_utils import Bip39MnemonicGenerator, Bip39WordsNum
-from .models import MnemonicModel
+from .models import MnemonicModel, UserModel
+from .utils import generate_wallet_ETH, generate_wallet_SOL, generate_mnemonic
 from typing import Tuple
-
-def generate_wallet_ETH(mnemonic : str, index : int) -> Tuple[str, str]:
-    eth_private_key     = 'Ethereum Private Key'
-    eth_public_key      = '0xETHEREUMWALLETADDRESS'
-    return eth_private_key, eth_public_key
-
-def generate_wallet_SOL(mnemonic : str, index : int) -> Tuple[str, str]:
-    sol_private_key     = 'SOLANA Private Key'
-    sol_public_key      = 'SOALANAWALLETADDRESS'
-    return sol_private_key, sol_public_key
-
-def generate_mnemonic() -> str:
-    mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24)
-    return str(mnemonic)
-
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
 class MnemonicManager():
     def __init__(self) -> None:
-        self.index_key = -1
         pass
 
     def _is_exist_mnemonic(self) -> bool:
         return MnemonicModel.objects.filter(mnemonic__isnull=False).exists()
-
-    def _read_mnemonic(self) -> str:
-        if self._is_exist_mnemonic():
-            mnemonics = MnemonicModel.objects.all()
-            return mnemonics[0].mnemonic
-        else:
-            print('-- MnemonicManager >> Failed to read mnemonic --')
-            return None
 
     def _create_admin_wallet(self) -> None:
         try :
@@ -54,6 +30,31 @@ class MnemonicManager():
         except Exception as e:
             print(f'-- MnemonicManager >> Failed to create admin wallet {e} --')
 
+    def read_mnemonic(self) -> str:
+        if self._is_exist_mnemonic():
+            mnemonics = MnemonicModel.objects.all()
+            return mnemonics[0].mnemonic
+        else:
+            print('-- MnemonicManager >> Failed to read mnemonic --')
+            return None
+
+    def get_index_key(self) -> int:
+        if self._is_exist_mnemonic():
+            mnemonics = MnemonicModel.objects.all()
+            return mnemonics[0].index_key
+        else:
+            print('-- MnemonicManager >> Failed to read index_key --')
+            return None
+
+    def update_index_key(self, index : int) -> None:
+        if self._is_exist_mnemonic():
+            mnemonics = MnemonicModel.objects.all()
+            mnemonics[0].index_key = index
+            mnemonics[0].save()
+        else:
+            print('-- MnemonicManager >> Failed to update index_key --')
+
+
     def init(self) -> None:
         if self._is_exist_mnemonic():
             print('-- MnemonicManager >> Mnemonic exist --')
@@ -66,13 +67,54 @@ class UserManager():
     def __init__(self) -> None:
         pass
 
-    def is_exist_user(self, user_id: int) -> bool:
-        return User.objects.filter(user_id=user_id).exists()
+    def _is_exist_user(self, user_id: int) -> bool:
+        return UserModel.objects.filter(user_id=user_id).exists()
 
-    def register_user(self, user_id : int, user_name : str, real_name : str) -> None:
-        if self.is_exist_user(user_id):
-            print(f"-- UserManager >> {real_name} exist --")
-
-            pass
+    def _register_user(self, user_id : int, user_name : str, real_name : str, eth_prv_key : str, eth_pub_key : str, sol_prv_key : str, sol_pub_key : str) -> object:
+        user =  UserModel.objects.create(
+                    user_id=user_id, 
+                    real_name=real_name, 
+                    user_name=user_name,
+                    eth_public_key=eth_pub_key,
+                    eth_private_key=eth_prv_key,
+                    sol_public_key=sol_pub_key,
+                    sol_private_key=sol_prv_key
+                )
+        user.save()
+        print(f"-- UserManager >> {real_name} created --")
+    
+    def get_user_wallet(self, user_id : int) -> Tuple[str, str]:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.eth_public_key, user.sol_public_key
         else:
-            pass
+            return None, None
+
+    def get_user_lock(self, user_id : int) -> bool:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.account_lock
+        return False
+
+    def get_user_balance(self, user_id : int) -> Tuple[float, float, float, float]:
+        if self._is_exist_user(user_id):
+            user = UserModel.objects.get(user_id=user_id)
+            return user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol
+        return None, None, None, None
+
+    def init(self, user_id : int, user_name : str, real_name : str) -> bool:
+        if self._is_exist_user(user_id):
+            print(f"-- UserManager >> {real_name} exist --")
+        else:
+            mnemonicMgr = MnemonicManager()
+            mnemonic_data = mnemonicMgr.read_mnemonic()
+            if mnemonic_data == None:
+                return False
+            index_key = mnemonicMgr.get_index_key()
+            index_key += 1
+            eth_private, eth_public = generate_wallet_ETH(mnemonic_data, index_key)
+            sol_private, sol_public = generate_wallet_SOL(mnemonic_data, index_key)
+            mnemonicMgr.update_index_key(index_key)
+            self._register_user(user_id, user_name, real_name, eth_private, eth_public, sol_private, sol_public)
+        
+        return True

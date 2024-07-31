@@ -16,14 +16,16 @@ class MnemonicModel(models.Model):
         return self.id
 
 class UserModel(models.Model):
-    user_id         = models.IntegerField()
+    user_id         = models.BigIntegerField(max_length=100)
     real_name       = models.CharField(max_length=100)
     user_name       = models.CharField(max_length=100)
     account_lock    = models.BooleanField(default=True)
-    public_key      = models.CharField(max_length=100, null=False)
-    private_key     = models.CharField(max_length=100, null=False)
-    deposit_eth     = models.FloatField(default=0)
-    deposit_sol     = models.FloatField(default=0)
+    eth_public_key  = models.CharField(max_length=100, null=False)
+    eth_private_key = models.CharField(max_length=100, null=False)
+    sol_public_key  = models.CharField(max_length=100, null=False)
+    sol_private_key = models.CharField(max_length=100, null=False)
+    balance_eth     = models.FloatField(default=0)
+    balance_sol     = models.FloatField(default=0)
     profit_eth      = models.FloatField(default=0)
     profit_sol      = models.FloatField(default=0)
     created_at      = models.DateTimeField(auto_now_add=True)
@@ -35,7 +37,7 @@ class UserModel(models.Model):
         return self.user_id if self.user_id else self.id
 
 class TokenListModel(models.Model):
-    user_id     = models.IntegerField()
+    user_id     = models.BigIntegerField(max_length=100)
     address     = models.CharField(max_length=100)
     market_cap  = models.IntegerField(null=False)
     liquidity   = models.IntegerField(null=False)
@@ -45,5 +47,5 @@ class TokenListModel(models.Model):
     class Meta:
         db_table = 'tbl_token_list'
 
-    def __int__(self):
-        return self.user_id if self.user_id else self.id
+    def __str__(self):
+        return self.address if self.address else str(self.id)
