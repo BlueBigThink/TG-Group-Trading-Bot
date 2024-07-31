@@ -102,6 +102,9 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+########################################################################
+#                                 +End                                 #
+########################################################################
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
