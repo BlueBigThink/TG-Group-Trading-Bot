@@ -28,6 +28,7 @@ from telegram.ext import (
 )
 
 from tg_bot_app.views import MnemonicManager, UserManager
+from tg_bot_app.utils import is_valid_ethereum_address, is_valid_solana_address
 from dotenv import load_dotenv
 
 logging.basicConfig(
@@ -43,7 +44,8 @@ def format_float(value, decimals):
 mnemonicManager = MnemonicManager()
 userManager = UserManager()
 
-MAIN, SETTINGS = range(2)
+MAIN, SETTINGS, WITHDRAW, TRADE = range(4)
+g_UserStatus = {}
 ########################################################################
 #                        start (Entry Point)                           #
 ########################################################################
@@ -62,6 +64,12 @@ async def start(update: Update, context: CallbackContext) -> None:
 
     await sync_to_async(userManager.init)(user_id, user_name, real_name)
     isLock = await sync_to_async(userManager.get_user_lock)(user_id)
+    global g_UserStatus
+    g_UserStatus[user_id] = {
+        "withdraw_request": False,
+        "trade_request" : False
+    }
+
     str_lock_status = "ACCOUNT LOCKED! 🔒"
     if not None and not isLock:
         str_lock_status = "ACCOUNT OPENED! 🔓"
@@ -73,7 +81,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         ],
         [
             KeyboardButton("⚙️ Setting"),
-            KeyboardButton("🏹 Trade"),
+            KeyboardButton("🔄 Trade"),
         ],
         [
             KeyboardButton("👤 Admin"),
@@ -101,6 +109,11 @@ async def _start(update: Update, context: CallbackContext) -> None:
 
     await sync_to_async(userManager.init)(user_id, user_name, real_name)
     isLock = await sync_to_async(userManager.get_user_lock)(user_id)
+    global g_UserStatus
+    g_UserStatus[user_id] = {
+        "withdraw_request": False,
+        "trade_request" : False
+    }
     str_lock_status = "ACCOUNT LOCKED! 🔒"
     if not None and not isLock:
         str_lock_status = "ACCOUNT OPENED! 🔓"
@@ -109,7 +122,7 @@ async def _start(update: Update, context: CallbackContext) -> None:
     )
     return MAIN
 ########################################################################
-#                              +Deposit                                #
+#                              +Profile                                #
 ########################################################################
 async def _func_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -133,6 +146,7 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = update.message.text
     userInfo = update.message.from_user
     user_id = userInfo['id']
+    global g_UserStatus
     match text:
         case '⬇️ Deposit':
             eth_wallet, sol_wallet = await sync_to_async(userManager.get_user_wallet)(user_id)
@@ -140,12 +154,16 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 f"*ETH :*\n👉 `{eth_wallet}`\n*SOL :*\n👉 `{sol_wallet}`",
                 parse_mode=ParseMode.MARKDOWN_V2
             )
+        case '⬆️ Withdraw':
+            g_UserStatus[user_id]['withdraw_request'] = True
+            st_wallet = "*Input receiver address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
+            st_wallet=st_wallet.replace('.', '\.')
+            await update.message.reply_text(
+                f"*Please withdraw here\!*\n*__Withdraw only profits\nDeposit ➡️ Profit\(No Fee\)__*\n{st_wallet}",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
         case '💳 Balance':
             eth, sol, profit_eth, profit_sol = await sync_to_async(userManager.get_user_balance)(user_id)
-            sEth = str(eth).replace('.', '\.')
-            sSol = str(sol).replace('.', '\.')
-            sProfit_eth = str(profit_eth).replace('.', '\.')
-            sProfit_sol = str(profit_sol).replace('.', '\.')
             await update.message.reply_text(
                 "Your Wallet 💳\n"+
                 f"<pre>Token      Deposit    Profit\n"+
@@ -208,6 +226,154 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return SETTINGS
+        case '🔄 Trade':
+            isLock = await sync_to_async(userManager.get_user_lock)(user_id)
+            if isLock:
+                await update.message.reply_text(
+                    "⚠️ Your account is Locked! 🔒",
+                )
+                return MAIN
+            g_UserStatus[user_id]['trade_request'] = True
+            st_wallet = "*Input Token address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
+            st_wallet=st_wallet.replace('.', '\.')
+            await update.message.reply_text(
+                f"*Please trade here\!*\n*__Trade only deposit\nProfit ➡️ Deposit\(No Fee\)__*\n{st_wallet}",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+
+    if g_UserStatus[user_id]['trade_request'] :
+        params = text.split("/")
+        chain_type = params[0].lower()
+        token_addr = ""
+        if len(params) > 1:
+            token_addr = params[1]
+
+        keyboard = [
+            [
+                InlineKeyboardButton("Retry", callback_data="RestartTrade"),
+                InlineKeyboardButton("Cancel", callback_data="Home"),
+            ]
+        ]
+        match chain_type:
+            case 'eth':
+                if is_valid_ethereum_address(token_addr):
+                    pass
+                else:
+                    await update.message.reply_text(
+                        f"❌ Not ethereum address\n{token_addr}❓",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                return TRADE
+            case 'sol':
+                if is_valid_solana_address(token_addr):
+                    pass
+                else:
+                    await update.message.reply_text(
+                        f"❌ Not solana address\n{token_addr}❓",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                return TRADE
+    if g_UserStatus[user_id]['withdraw_request'] :
+        params = text.split("/")
+        chain_type = params[0].lower()
+        recev_addr = ""
+        if len(params) > 1:
+            recev_addr = params[1]
+        keyboard = [
+            [
+                InlineKeyboardButton("Retry", callback_data="RetryWithdraw"),
+                InlineKeyboardButton("Cancel", callback_data="Home"),
+            ]
+        ]
+        match chain_type:
+            case 'eth':
+                if is_valid_ethereum_address(recev_addr):
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("All", callback_data="Withdraw:ETH:100"),
+                            InlineKeyboardButton("75%",  callback_data="Withdraw:ETH:75"),
+                        ],
+                        [
+                            InlineKeyboardButton("50%",  callback_data="Withdraw:ETH:50"),
+                            InlineKeyboardButton("25%",  callback_data="Withdraw:ETH:25"),
+                        ],
+                        [
+                            InlineKeyboardButton("Cancel",  callback_data="Home"),
+                        ]
+                    ]
+                    await update.message.reply_text(
+                        f"✅ Receiver address\n{recev_addr}\nAmount?",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"❌ Not ethereum address\n{recev_addr}❓",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                return WITHDRAW
+            case 'sol':
+                if is_valid_solana_address(recev_addr):
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("All", callback_data="Withdraw:SOL:100"),
+                            InlineKeyboardButton("75%",  callback_data="Withdraw:SOL:75"),
+                        ],
+                        [
+                            InlineKeyboardButton("50%",  callback_data="Withdraw:SOL:50"),
+                            InlineKeyboardButton("25%",  callback_data="Withdraw:SOL:25"),
+                        ],
+                        [
+                            InlineKeyboardButton("Cancel",  callback_data="Home"),
+                        ]
+                    ]
+                    await update.message.reply_text(
+                        f"✅ Receiver address\n{recev_addr}\nAmount?",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                else: 
+                    await update.message.reply_text(
+                        f"❌ Not Solana address\n{recev_addr}❓",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                return WITHDRAW
+########################################################################
+#                               +Trade                                 #
+########################################################################
+async def _restartTrade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    global g_UserStatus
+    g_UserStatus[user_id]['trade_request'] = True
+    st_wallet = "*Input token address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
+    st_wallet=st_wallet.replace('.', '\.')
+    await query.message.edit_text(
+        f"*Please trade here\!*\n*__Trade only deposit\nProfit ➡️ Deposit\(No Fee\)__*\n{st_wallet}",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    return MAIN
+########################################################################
+#                              +Withdraw                               #
+########################################################################
+async def _retryWithdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    global g_UserStatus
+    g_UserStatus[user_id]['withdraw_request'] = True
+    st_wallet = "*Input receiver address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
+    st_wallet=st_wallet.replace('.', '\.')
+    await query.message.edit_text(
+        f"*Please withdraw here\!*\n*__Withdraw only profits\nDeposit ➡️ Profit\(No Fee\)__*\n{st_wallet}",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    return MAIN
+async def _withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    params = query.data.split(":")
+    await query.message.edit_text(
+        f"Please wait...⏰",
+    )
+    print("**********************", params)
 
 ########################################################################
 #                              +Settings                               #
@@ -250,7 +416,7 @@ async def _P2D_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = query.from_user.id
     keyboard = [
         [
-            InlineKeyboardButton("100%", callback_data="P2D:ETH:100"),
+            InlineKeyboardButton("All", callback_data="P2D:ETH:100"),
             InlineKeyboardButton("75%",  callback_data="P2D:ETH:75"),
             InlineKeyboardButton("50%",  callback_data="P2D:ETH:50"),
             InlineKeyboardButton("25%",  callback_data="P2D:ETH:25"),
@@ -269,7 +435,7 @@ async def _P2D_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = query.from_user.id
     keyboard = [
         [
-            InlineKeyboardButton("100%", callback_data="P2D:SOL:100"),
+            InlineKeyboardButton("All", callback_data="P2D:SOL:100"),
             InlineKeyboardButton("75%",  callback_data="P2D:SOL:75"),
             InlineKeyboardButton("50%",  callback_data="P2D:SOL:50"),
             InlineKeyboardButton("25%",  callback_data="P2D:SOL:25"),
@@ -289,7 +455,7 @@ async def _D2P_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = query.from_user.id
     keyboard = [
         [
-            InlineKeyboardButton("100%", callback_data="D2P:ETH:100"),
+            InlineKeyboardButton("All", callback_data="D2P:ETH:100"),
             InlineKeyboardButton("75%",  callback_data="D2P:ETH:75"),
             InlineKeyboardButton("50%",  callback_data="D2P:ETH:50"),
             InlineKeyboardButton("25%",  callback_data="D2P:ETH:25"),
@@ -308,7 +474,7 @@ async def _D2P_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = query.from_user.id
     keyboard = [
         [
-            InlineKeyboardButton("100%", callback_data="D2P:SOL:100"),
+            InlineKeyboardButton("All", callback_data="D2P:SOL:100"),
             InlineKeyboardButton("75%",  callback_data="D2P:SOL:75"),
             InlineKeyboardButton("50%",  callback_data="D2P:SOL:50"),
             InlineKeyboardButton("25%",  callback_data="D2P:SOL:25"),
@@ -328,11 +494,13 @@ async def _operation_D2P_P2d(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = query.from_user.id
     params= query.data.split(":")
     op_type = params[0]
-    token_type = params[1]
-    amount = int(params[2])
+    token_type = ""
+    amount = 0
+    if len(params) > 2:
+        token_type = params[1]
+        amount = int(params[2])
     await sync_to_async(userManager.operation_balance)(user_id, op_type, token_type, amount)
     await _back_d2p_p2d(update, op_type)
-
 ############################# BACK D2P & P2D ############################
 async def _back_d2p_p2d(update: Update, branch : str) -> None:
     query = update.callback_query
@@ -363,12 +531,10 @@ async def _back_d2p_p2d(update: Update, branch : str) -> None:
                 f"To withdraw, please here!\nDeposit ➡️ Profit(No Fee)",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-
 async def _Back_D2P_P2D(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     branch = query.data.split(":")[1]
     await _back_d2p_p2d(update, branch)
-
 ########################################################################
 #                                 +End                                 #
 ########################################################################
@@ -409,7 +575,12 @@ def main() -> None:
 
                         CallbackQueryHandler(_Back_D2P_P2D, pattern="^BACK:"),                        
 
-                        CallbackQueryHandler(_start, pattern="Home")],            
+                        CallbackQueryHandler(_start, pattern="Home")],
+            WITHDRAW:   [CallbackQueryHandler(_start, pattern="Home"),
+                        CallbackQueryHandler(_retryWithdraw, pattern="RetryWithdraw"),
+                        CallbackQueryHandler(_withdraw, pattern="^Withdraw")],        
+            TRADE:     [CallbackQueryHandler(_start, pattern="Home"),
+                        CallbackQueryHandler(_restartTrade, pattern="RestartTrade")],        
         },
         fallbacks=[CommandHandler("end", end)],
         allow_reentry=True,

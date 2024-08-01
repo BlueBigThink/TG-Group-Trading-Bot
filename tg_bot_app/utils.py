@@ -1,7 +1,15 @@
 from solders.keypair import Keypair
+from solders.pubkey import Pubkey
+from solana.rpc.api import Client
 from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes, Bip39MnemonicGenerator, Bip39WordsNum
+from web3 import Web3
 import base58
 from typing import Tuple
+
+INFURA_ID = "e254d35aa64b4c16816163824d9d5b83"
+RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
+w3 = Web3(Web3.HTTPProvider(RPC_URL))
+client = Client("https://api.devnet.solana.com")
 
 def generate_wallet_ETH(mnemonic : str, index : int) -> Tuple[str, str]:
     seed_bytes = Bip39SeedGenerator(mnemonic).Generate()
@@ -35,3 +43,25 @@ def generate_wallet_SOL(mnemonic : str, index : int) -> Tuple[str, str]:
 def generate_mnemonic() -> str:
     mnemonic = Bip39MnemonicGenerator().FromWordsNumber(Bip39WordsNum.WORDS_NUM_24)
     return str(mnemonic)
+
+def is_valid_solana_address(address : str) -> bool:
+    try :
+        balance_response = client.get_balance(Pubkey.from_string(address))
+        balance_lamports = balance_response.value
+
+        if balance_lamports is not None:
+            return True
+        else:
+            return False
+    except Exception as e:
+        return False
+
+def is_valid_ethereum_address(address : str) -> bool:
+    try :
+        balance = w3.eth.get_balance(address)
+        if balance is not None:
+            return True
+        else:
+            return False
+    except Exception as e:
+        return False
