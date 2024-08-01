@@ -113,6 +113,36 @@ class UserManager():
             user = UserModel.objects.get(user_id=user_id)
             return user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol
         return None, None, None, None
+    
+    def operation_balance(self, user_id : int, op_type : str, token_type : str, amount : int) -> None:
+        try:
+            user = UserModel.objects.get(user_id=user_id)
+            de_eth, de_sol, pr_eth, pr_sol = user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol
+            match op_type:
+                case 'D2P':
+                    match token_type:
+                        case 'ETH':
+                            delta = de_eth * float(amount / 100)
+                            de_eth -= delta
+                            pr_eth += delta
+                        case 'SOL':
+                            delta = de_sol * float(amount / 100)
+                            de_sol -= delta
+                            pr_sol += delta
+                case 'P2D':
+                    match token_type:
+                        case 'ETH':
+                            delta = pr_eth * float(amount / 100)
+                            pr_eth -= delta
+                            de_eth += delta
+                        case 'SOL':
+                            delta = pr_sol * float(amount / 100)
+                            pr_sol -= delta
+                            de_sol += delta
+            user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol = de_eth, de_sol, pr_eth, pr_sol
+            user.save()
+        except Exception as e:
+            print(f"-- UserManager >> error in operation_balance : {e}")
 
     def init(self, user_id : int, user_name : str, real_name : str) -> bool:
         if self._is_exist_user(user_id):

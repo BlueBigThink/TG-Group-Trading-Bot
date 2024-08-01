@@ -183,7 +183,7 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 ]
             ]
             await update.message.reply_text(
-                f"To trade, please here!\nProfit ➡️ Deposit",
+                f"To trade, please here!\nProfit ➡️ Deposit(No Fee)",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             ################################ Deposit -> Profit ###################################
@@ -194,16 +194,17 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 ]
             ]
             await update.message.reply_text(
-                f"To withdraw, please here!\nDeposit ➡️ Profit",
+                f"To withdraw, please here!\nDeposit ➡️ Profit(No Fee)",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
+            ####################################### Home ##########################################
             keyboard = [
                 [
                     InlineKeyboardButton("Home", callback_data="Home"),
                 ]
             ]
             await update.message.reply_text(
-                "You have done?",
+                "You have done? 👇",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             return SETTINGS
@@ -233,19 +234,16 @@ async def _show_lock_result(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"⚙️ Setting\n\n{str_lock_status}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 async def _lock_to_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     await sync_to_async(userManager.user_unlock)(user_id)
     await _show_lock_result(update, context)
-
 async def _unlock_to_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     await sync_to_async(userManager.user_lock)(user_id)
     await _show_lock_result(update, context)
-
 ############################# Profit -> Deposit ############################
 async def _P2D_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -256,11 +254,14 @@ async def _P2D_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("75%",  callback_data="P2D:ETH:75"),
             InlineKeyboardButton("50%",  callback_data="P2D:ETH:50"),
             InlineKeyboardButton("25%",  callback_data="P2D:ETH:25"),
+        ],
+        [
+            InlineKeyboardButton("Back",  callback_data="BACK:P2D"),
         ]
     ]
     _, _, profit_eth, _ = await sync_to_async(userManager.get_user_balance)(user_id)
     await query.message.edit_text(
-        f"Profit ETH 🟰 {profit_eth} 🔜 Deposit",
+        f"Profit ETH 🟰 {format_float(profit_eth,3)} 🔜 Deposit",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 async def _P2D_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -272,19 +273,16 @@ async def _P2D_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("75%",  callback_data="P2D:SOL:75"),
             InlineKeyboardButton("50%",  callback_data="P2D:SOL:50"),
             InlineKeyboardButton("25%",  callback_data="P2D:SOL:25"),
+        ],
+        [
+            InlineKeyboardButton("Back",  callback_data="BACK:P2D"),
         ]
     ]
     _, _, _, profit_sol = await sync_to_async(userManager.get_user_balance)(user_id)
     await query.message.edit_text(
-        f"Profit SOL 🟰 {profit_sol} 🔜 Deposit",
+        f"Profit SOL 🟰 {format_float(profit_sol,3)} 🔜 Deposit",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-async def _Profit_2_Deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    params= query.data.split(":")
-    print("***************",params)
-
 ############################# Deposit -> Profit ############################
 async def _D2P_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -295,11 +293,14 @@ async def _D2P_ETH(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("75%",  callback_data="D2P:ETH:75"),
             InlineKeyboardButton("50%",  callback_data="D2P:ETH:50"),
             InlineKeyboardButton("25%",  callback_data="D2P:ETH:25"),
+        ],
+        [
+            InlineKeyboardButton("Back",  callback_data="BACK:D2P"),
         ]
     ]
     eth, _, _, _ = await sync_to_async(userManager.get_user_balance)(user_id)
     await query.message.edit_text(
-        f"Deposit ETH 🟰 {eth} 🔜 Profit",
+        f"Deposit ETH 🟰 {format_float(eth,3)} 🔜 Profit",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 async def _D2P_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -311,18 +312,63 @@ async def _D2P_SOL(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             InlineKeyboardButton("75%",  callback_data="D2P:SOL:75"),
             InlineKeyboardButton("50%",  callback_data="D2P:SOL:50"),
             InlineKeyboardButton("25%",  callback_data="D2P:SOL:25"),
+        ],
+        [
+            InlineKeyboardButton("Back",  callback_data="BACK:D2P"),
         ]
     ]
     _, sol, _, _ = await sync_to_async(userManager.get_user_balance)(user_id)
     await query.message.edit_text(
-        f"Deposit SOL 🟰 {sol} 🔜 Profit",
+        f"Deposit SOL 🟰 {format_float(sol,3)} 🔜 Profit",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-async def _Deposit_2_Profit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+############################ Operation D2P, P2D ###########################
+async def _operation_D2P_P2d(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     params= query.data.split(":")
-    print("***************",params)
+    op_type = params[0]
+    token_type = params[1]
+    amount = int(params[2])
+    await sync_to_async(userManager.operation_balance)(user_id, op_type, token_type, amount)
+    await _back_d2p_p2d(update, op_type)
+
+############################# BACK D2P & P2D ############################
+async def _back_d2p_p2d(update: Update, branch : str) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    eth, sol, profit_eth, profit_sol = await sync_to_async(userManager.get_user_balance)(user_id)
+    match branch:
+        case 'P2D':
+            ################################ Profit -> Deposit ###################################
+            keyboard = [
+                [
+                    InlineKeyboardButton(f"ETH🟰{format_float(profit_eth, 3)}", callback_data="P2D_ETH"),
+                    InlineKeyboardButton(f"SOL🟰{format_float(profit_sol, 3)}", callback_data="P2D_SOL"),
+                ]
+            ]
+            await query.message.edit_text(
+                f"To trade, please here!\nProfit ➡️ Deposit(No Fee)",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        case 'D2P':
+            ################################ Deposit -> Profit ###################################
+            keyboard = [
+                [
+                    InlineKeyboardButton(f"ETH🟰{format_float(eth, 3)}", callback_data="D2P_ETH"),
+                    InlineKeyboardButton(f"SOL🟰{format_float(sol, 3)}", callback_data="D2P_SOL"),
+                ]
+            ]
+            await query.message.edit_text(
+                f"To withdraw, please here!\nDeposit ➡️ Profit(No Fee)",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+async def _Back_D2P_P2D(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    branch = query.data.split(":")[1]
+    await _back_d2p_p2d(update, branch)
+
 ########################################################################
 #                                 +End                                 #
 ########################################################################
@@ -355,11 +401,13 @@ def main() -> None:
 
                         CallbackQueryHandler(_P2D_ETH, pattern="P2D_ETH"),
                         CallbackQueryHandler(_P2D_SOL, pattern="P2D_SOL"),
-                        CallbackQueryHandler(_Profit_2_Deposit, pattern="^P2D:"),                        
+                        CallbackQueryHandler(_operation_D2P_P2d, pattern="^P2D:"),                        
                         
                         CallbackQueryHandler(_D2P_ETH, pattern="D2P_ETH"),
                         CallbackQueryHandler(_D2P_SOL, pattern="D2P_SOL"),
-                        CallbackQueryHandler(_Deposit_2_Profit, pattern="^D2P:"),                        
+                        CallbackQueryHandler(_operation_D2P_P2d, pattern="^D2P:"),                        
+
+                        CallbackQueryHandler(_Back_D2P_P2D, pattern="^BACK:"),                        
 
                         CallbackQueryHandler(_start, pattern="Home")],            
         },
