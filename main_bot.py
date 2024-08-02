@@ -28,7 +28,11 @@ from telegram.ext import (
 )
 
 from tg_bot_app.views import MnemonicManager, UserManager
-from tg_bot_app.utils import is_valid_ethereum_address, is_valid_solana_address
+from tg_bot_app.utils import ( 
+    is_valid_ethereum_address, 
+    is_valid_solana_address, 
+    get_name_marketcap_liqudity_price 
+)
 from dotenv import load_dotenv
 
 logging.basicConfig(
@@ -147,6 +151,8 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     userInfo = update.message.from_user
     user_id = userInfo['id']
     global g_UserStatus
+##################################################################################################################################################################
+##################################################################################################################################################################
     match text:
         case '⬇️ Deposit':
             eth_wallet, sol_wallet = await sync_to_async(userManager.get_user_wallet)(user_id)
@@ -240,7 +246,8 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 f"*Please trade here\!*\n*__Trade only deposit\nProfit ➡️ Deposit\(No Fee\)__*\n{st_wallet}",
                 parse_mode=ParseMode.MARKDOWN_V2
             )
-
+##################################################################################################################################################################
+##################################################################################################################################################################
     if g_UserStatus[user_id]['trade_request'] :
         params = text.split("/")
         chain_type = params[0].lower()
@@ -257,7 +264,30 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         match chain_type:
             case 'eth':
                 if is_valid_ethereum_address(token_addr):
-                    pass
+                    token_info = await sync_to_async(get_name_marketcap_liqudity_price)(chain_type, token_addr)
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("Buy", callback_data="BuyToken:ETH"),
+                            InlineKeyboardButton("Cancel", callback_data="Home"),
+                        ]
+                    ]
+                    await update.message.reply_text(
+                        f"<pre> Field           | Value\n"+
+                        "---------------------------------\n"+
+                        f" Name            | {token_info['name']}\n"+
+                        f" Symbol          | {token_info['symbol']}\n"+
+                        f" Market Cap      | ${token_info['market_cap']}\n"+
+                        f" Market Cap Rank | {token_info['market_cap_rank']}\n"+
+                        f" Price           | ${token_info['price']}\n"+
+                        f" H_24h           | ${token_info['high_24h']}\n"+
+                        f" L_24h           | ${token_info['low_24h']}\n"+
+                        f" Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n"+
+                        f" Percentage_24h  | {token_info['price_change_percentage_24h']}%\n"+
+                        f" Total Volume    | {token_info['total_volume']}\n"+
+                        f" Liquidity       | {token_info['liquidity']}</pre>",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
                 else:
                     await update.message.reply_text(
                         f"❌ Not ethereum address\n{token_addr}❓",
@@ -266,13 +296,38 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 return TRADE
             case 'sol':
                 if is_valid_solana_address(token_addr):
-                    pass
+                    token_info = await sync_to_async(get_name_marketcap_liqudity_price)(chain_type, token_addr)
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("Buy", callback_data="BuyToken:ETH"),
+                            InlineKeyboardButton("Cancel", callback_data="Home"),
+                        ]
+                    ]
+                    await update.message.reply_text(
+                        f"<pre> Field           | Value\n"+
+                        "---------------------------------\n"+
+                        f" Name            | {token_info['name']}\n"+
+                        f" Symbol          | {token_info['symbol']}\n"+
+                        f" Market Cap      | ${token_info['market_cap']}\n"+
+                        f" Market Cap Rank | {token_info['market_cap_rank']}\n"+
+                        f" Price           | ${token_info['price']}\n"+
+                        f" H_24h           | ${token_info['high_24h']}\n"+
+                        f" L_24h           | ${token_info['low_24h']}\n"+
+                        f" Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n"+
+                        f" Percentage_24h  | {token_info['price_change_percentage_24h']}%\n"+
+                        f" Total Volume    | {token_info['total_volume']}\n"+
+                        f" Liquidity       | {token_info['liquidity']}</pre>",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
                 else:
                     await update.message.reply_text(
                         f"❌ Not solana address\n{token_addr}❓",
                         reply_markup=InlineKeyboardMarkup(keyboard)
                     )
                 return TRADE
+##################################################################################################################################################################
+##################################################################################################################################################################
     if g_UserStatus[user_id]['withdraw_request'] :
         params = text.split("/")
         chain_type = params[0].lower()

@@ -14,3 +14,37 @@ try :
         print(False)
 except Exception as e:
     print(False)
+
+
+from web3 import Web3
+from uniswap import Uniswap
+
+# Connect to Infura
+infura_url = 'https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID'
+web3 = Web3(Web3.HTTPProvider(infura_url))
+
+if not web3.isConnected():
+    raise Exception("Failed to connect to the Ethereum network")
+
+# Initialize Uniswap
+uniswap = Uniswap(address=None, private_key=None, version=2)  # Uniswap V2
+
+# Define token and WETH addresses
+token_address = '0xYourTokenAddress'
+weth_address = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+
+# Get the pair address
+pair_address = uniswap.get_pair(token_address, weth_address)
+
+# Create a contract instance for the pair
+pair_contract = web3.eth.contract(address=pair_address, abi=uniswap.PAIR_ABI)
+
+# Get the reserves
+reserves = pair_contract.functions.getReserves().call()
+
+# Extract liquidity
+token_liquidity = reserves[0]
+weth_liquidity = reserves[1]
+
+print(f'Token Liquidity: {token_liquidity}')
+print(f'WETH Liquidity: {weth_liquidity}')

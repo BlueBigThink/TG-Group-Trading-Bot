@@ -4,7 +4,9 @@ from solana.rpc.api import Client
 from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes, Bip39MnemonicGenerator, Bip39WordsNum
 from web3 import Web3
 import base58
-from typing import Tuple
+import requests
+import json
+from typing import Tuple, Dict, Any
 
 INFURA_ID = "e254d35aa64b4c16816163824d9d5b83"
 RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
@@ -65,3 +67,40 @@ def is_valid_ethereum_address(address : str) -> bool:
             return False
     except Exception as e:
         return False
+
+def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Dict[str, Any]:
+    info = {
+        'name' : '',
+        'symbol' : '',
+        'market_cap' : 0,
+        'market_cap_rank' : 0,
+        'price' : 0,
+        'high_24h' : 0,
+        'low_24h' : 0,
+        'price_change_24h': 0.0,
+        'price_change_percentage_24h': 0.0,
+        'total_volume' : 0,
+        'liquidity' : ''
+    }
+    match chain_type:
+        case 'eth':
+            chain_name = 'ethereum'
+        case 'sol':
+            chain_name = 'solana'
+
+    info_url = f"https://api.coingecko.com/api/v3/coins/{chain_name}/contract/{token_address}"
+    resp = requests.get(info_url)
+    if resp.status_code == 200 :
+        token_info = resp.json()
+        info['name']                        = token_info['name']
+        info['symbol']                      = token_info['symbol']
+        info['market_cap']                  = token_info['market_data']['market_cap']['usd']
+        info['market_cap_rank']             = token_info['market_cap_rank']
+        info['price']                       = token_info['market_data']['current_price']['usd']
+        info['high_24h']                    = token_info['market_data']['high_24h']['usd']
+        info['low_24h']                     = token_info['market_data']['low_24h']['usd']
+        info['price_change_24h']            = token_info['market_data']['price_change_24h']
+        info['price_change_percentage_24h'] = token_info['market_data']['price_change_percentage_24h']
+        info['total_volume']                = token_info['market_data']['total_volume']['usd']
+
+    return info
