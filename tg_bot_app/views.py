@@ -1,15 +1,23 @@
 from django.shortcuts import render
-from .models import MnemonicModel, UserModel, DepositModel
+from .models import MnemonicModel, UserModel, DepositModel, WithdrawModel, TradeModel
+from django.db.models import Sum, Count
 from .utils import ( 
     generate_wallet_ETH, 
     generate_wallet_SOL, 
     generate_mnemonic,
     transfer_all_eth_to,
-    transfer_all_sol_to
+    transfer_balance_eth_to,
+    transfer_all_sol_to,
+    swap_eth_to_tokens
 )
 import time
 import threading
-from typing import Tuple
+import requests
+from typing import Tuple, Dict, Any, List
+import os
+from dotenv import load_dotenv
+load_dotenv()
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
@@ -20,7 +28,9 @@ class MnemonicManager():
 
     def get_owner_wallet(self) -> Tuple[str, str]:
         return self.owner_eth_address, self.owner_sol_address
-    
+    def get_owner_prv_key_from_db(self) -> Tuple[str, str]:
+        mnemonic = MnemonicModel.objects.all().first()
+        return mnemonic.eth_private_key, mnemonic.sol_private_key
     def _is_exist_mnemonic(self) -> bool:
         return MnemonicModel.objects.filter(mnemonic__isnull=False).exists()
 
@@ -114,6 +124,30 @@ class UserManager():
         deposit.save()
         print(f"-- UserManager >> Deposit, user : {user_id}  --")
 
+    def _calculate_contribution(self, token_type : str) -> Dict[str, Any]:
+        users = UserModel.objects.filter(account_lock=False)
+        contribution = {}
+        match token_type:
+            case 'ETH':
+                available_ETH = UserModel.objects.filter(account_lock=False).aggregate(total_sum=Sum('balance_eth'))['total_sum']
+                if available_ETH == 0 : 
+                    return None
+                for user in users:
+                    contribution[user.user_id] = user.balance_eth / available_ETH
+            case 'SOL':
+                available_SOL = UserModel.objects.filter(account_lock=False).aggregate(total_sum=Sum('balance_sol'))['total_sum']
+                if available_SOL == 0 : 
+                    return None
+                for user in users:
+                    contribution[user.user_id] = user.balance_eth / available_ETH
+        return contribution
+    
+    def get_trade_able_token(self) -> Tuple[int, float, float]:
+        available_Users = UserModel.objects.filter(account_lock=False).aggregate(total_cnt=Count('balance_eth'))['total_cnt']
+        available_ETH = UserModel.objects.filter(account_lock=False).aggregate(total_sum=Sum('balance_eth'))['total_sum']
+        available_SOL = UserModel.objects.filter(account_lock=False).aggregate(total_sum=Sum('balance_sol'))['total_sum']
+        return available_Users, available_ETH, available_SOL
+    
     def get_user_wallet(self, user_id : int) -> Tuple[str, str]:
         if self._is_exist_user(user_id):
             user = UserModel.objects.get(user_id=user_id)
@@ -193,9 +227,69 @@ class UserManager():
                     user.balance_eth += amount
                     user.save()
                     self._add_user_deposit(user_id, "Ethereum", amount, eth_dep_res['tx'])
+                    data = {
+                        "chat_id" : user_id,
+                        "text" : f"✅ You Deposit {amount} ETH"
+                    }
+                    txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                    requests.post(txt_url, data)
                 # transfer_all_sol_to(sol_prv_key, sol_wallet, self.owner_sol_wallet)
         except Exception as e:
             print(f"-- UserManager >> track_user_deposit Error:{e} --")
+    
+    def user_withdraw_profit(self, user_id : int, token_type : str, percent : int, receiver : str) -> Dict[str, Any]:
+        _, _, profit_eth, profit_sol = self.get_user_balance(user_id)
+        mnemonicManager = MnemonicManager()
+        eth_prv_key, sol_prv_key = mnemonicManager.get_owner_prv_key_from_db()
+        match token_type:
+            case 'ETH':
+                amount = profit_eth * (percent / 100)
+                resp_tx = transfer_balance_eth_to(eth_prv_key, self.owner_eth_wallet, receiver, amount)
+                user = UserModel.objects.get(user_id=user_id)
+                user.profit_eth -= amount
+                user.save()
+                withdraw = WithdrawModel.objects.create(user_id=user_id, token_type='ETH', amount=amount, tx=resp_tx['tx'])
+                withdraw.save()
+                return resp_tx
+            # case 'SOL':
+            #     amount = profit_sol * (percent / 100)
+            #     resp_tx = transfer_balance_sol_to()
+
+    def _change_deposit_by_contribution(self, contribution : Dict[str, Any], token_type: str, token_amount : float) -> None:
+        user_id_list = list(contribution.keys())
+        for user_id in user_id_list:
+            user = UserModel.objects.get(user_id=int(user_id))
+            match token_type:
+                case 'ETH':
+                    user.balance_eth += token_amount * contribution[user_id]
+                case 'SOL':
+                    user.balance_sol += token_amount * contribution[user_id]
+            user.save()
+
+    def _add_profit_by_contribution(self, contribution : Dict[str, Any], token_type: str, token_amount : float) -> None:
+        user_id_list = list(contribution.keys())
+        for user_id in user_id_list:
+            user = UserModel.objects.get(user_id=int(user_id))
+            match token_type:
+                case 'ETH':
+                    user.profit_eth += token_amount * contribution[user_id]
+                case 'SOL':
+                    user.profit_sol += token_amount * contribution[user_id]
+            user.save()
+
+    def trade_buy_token(self, user_id : int, token_type : str, token_amount : float, buy_token_addr : str) -> None:
+        print("***** trade_buy_token **", user_id, token_type, token_amount, buy_token_addr)
+        contribution = self._calculate_contribution(token_type)
+        self._change_deposit_by_contribution(contribution, token_type, token_amount)
+        real_eth_sol_amount = token_amount * 0.99
+        mnemonicManager = MnemonicManager()
+        eth_prv_key, sol_prv_key = mnemonicManager.get_owner_prv_key_from_db()
+        if token_type == 'ETH':
+            swap_res = swap_eth_to_tokens(buy_token_addr, real_eth_sol_amount, eth_prv_key, self.owner_eth_wallet)
+            print(swap_res)
+
+        # elif token_type == 'SOL':
+        #     swap_res = swap_sol_to_tokens(buy_token_addr, token_amount, sol_prv_key, self.owner_sol_wallet)
 
     def init(self, user_id : int, user_name : str, real_name : str) -> bool:
         if self._is_exist_user(user_id):
@@ -231,12 +325,12 @@ class Timer(threading.Thread):
         self._timer_runs.clear()
 
 class TimeScheduler(Timer):
-    interval = 3
+    interval = 10
 
     def set_setting(self, UM : UserManager):
         self.userManager = UM
 
     def timer(self):
         self.userManager.track_user_deposit()
-        print(f"Number : {self.userManager.get_number_users()}")
+        # print(f"Number : {self.userManager.get_number_users()}")
 

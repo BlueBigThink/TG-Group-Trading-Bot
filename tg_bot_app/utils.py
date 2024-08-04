@@ -192,6 +192,40 @@ def transfer_all_eth_to(sender_private_key : str, sender : str, receiver : str) 
         print(f"-- transfer_all_eth_to : Error :{e} --")
         return None
 
+def transfer_balance_eth_to(sender_private_key : str, sender : str, receiver : str, amount : float) -> Dict[str, Any]: #TODO TEST
+    try :
+        print(f'withdraw : {amount}')
+        balance = web3.eth.get_balance(sender)
+        ether = web3.to_wei(amount, 'ether')
+        if ether > balance :
+            return
+        nonce = web3.eth.get_transaction_count(sender)
+        chain_id = web3.eth.chain_id
+        gas_price = web3.eth.gas_price
+        real_value = ether - gas_price * 21000
+        tx = ({
+            "chainId": chain_id,
+            "from": sender,
+            "to": receiver,
+            "nonce": nonce,
+            "gas": 21000,
+            "gasPrice": gas_price,
+            "value": real_value
+        })
+
+        signed_tx = web3.eth.account.sign_transaction(tx, sender_private_key)
+        send_tx = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        tx_reception = web3.eth.wait_for_transaction_receipt(send_tx)
+        tx_hash = f"{eth_tx_uri}{tx_reception.transactionHash.hex()}"
+        print(f"-- transfer_balance_eth_to : {tx_hash} --")
+        return {
+            'amount' : amount,
+            'tx' : tx_hash
+        }
+    except Exception as e:
+        print(f"-- transfer_balance_eth_to : Error :{e} --")
+        return None
+
 def transfer_all_sol_to(sender_priv_key : str, sender_pub_key : str, receiver_pub_key : str):
     sender = Keypair.from_base58_string(sender_priv_key)
     receiver = Pubkey.from_string(receiver_pub_key)
@@ -215,8 +249,8 @@ def transfer_all_sol_to(sender_priv_key : str, sender_pub_key : str, receiver_pu
     result = client.send_transaction(transaction, sender)
     return result
 
-def swap_eth_to_tokens(token_address : str, private_key : str, public_key : str): #TODO TEST
-    amount_in_wei = web3.to_wei(0.001, 'ether')
+def swap_eth_to_tokens(token_address : str, ether : float, private_key : str, public_key : str): #TODO TEST
+    amount_in_wei = web3.to_wei(ether, 'ether')
     min_tokens_to_receive = 0
     deadline = int(time.time()) + 60 * 20
 

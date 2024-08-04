@@ -29,6 +29,8 @@ class UserModel(models.Model):
     profit_eth      = models.FloatField(default=0)
     profit_sol      = models.FloatField(default=0)
     created_at      = models.DateTimeField(auto_now_add=True)
+    eth_contribution= models.FloatField(default=0, null=True, blank=True)
+    sol_contribution= models.FloatField(default=0, null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_users'
@@ -63,4 +65,36 @@ class DepositModel(models.Model):
     def __int__(self):
         return self.user_id if self.user_id else self.id
     
-# class WithdrawModel(models.Model):
+class WithdrawModel(models.Model):
+    user_id     = models.BigIntegerField(max_length=100)
+    token_type  = models.CharField(max_length=10)
+    amount      = models.FloatField(null=False)
+    tx          = models.CharField(max_length=255)
+    withdraw_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'tbl_withdraw_history'
+
+    def __int__(self):
+        return self.user_id if self.user_id else self.id
+
+class TradeModel(models.Model):
+    user_id             = models.BigIntegerField(max_length=100)
+    token_address       = models.CharField(max_length=255, null=False)
+    token_amount        = models.FloatField(default=0)
+    chain_type          = models.CharField(max_length=10)
+    out_native_amount   = models.FloatField(null=False)
+    out_gas_fee         = models.FloatField(null=False)
+    in_native_amount    = models.FloatField(default=0)
+    in_gas_fee          = models.FloatField(default=0)
+    buy_sell_status     = models.IntegerField(default=True) # buy : 1, sell : 0, failed : -1
+    buy_tx              = models.CharField(max_length=255, null=False)
+    sell_tx             = models.CharField(max_length=255, null=True, blank=True)
+    buy_at              = models.DateTimeField(auto_now_add=True)
+    sell_at             = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'tbl_trade'
+
+    def __int__(self):
+        return self.user_id if self.user_id else self.id
