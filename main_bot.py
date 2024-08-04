@@ -27,13 +27,15 @@ from telegram.ext import (
     filters
 )
 
-from tg_bot_app.views import MnemonicManager, UserManager
+from tg_bot_app.views import MnemonicManager, UserManager, TimeScheduler
 from tg_bot_app.utils import ( 
     is_valid_ethereum_address, 
     is_valid_solana_address, 
     get_name_marketcap_liqudity_price 
 )
 from dotenv import load_dotenv
+# import time
+# import threading
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -50,10 +52,25 @@ userManager = UserManager()
 
 MAIN, SETTINGS, WITHDRAW, TRADE = range(4)
 g_UserStatus = {}
+
+# async def callback_auto(context):
+#     await sync_to_async(mnemonicManager.update_index_key)(99)
+#     print('callback_auto')
+# def start_auto(update, context):
+#     chat_id = update.message.chat_id
+#     context.job_queue.run_repeating(callback_auto, 10)
+#     #context.job_queue.run_once(callback_auto, 3600, context=chat_id)
+#     #context.job_queue.run_daily(callback_auto, time=datetime.time(hour=9, minute=22), days=(0, 1, 2, 3, 4, 5, 6), context=chat_id)
+# def stop_notify(update, context):
+#     chat_id = update.message.chat_id
+#     context.bot.send_message(chat_id=chat_id, text='Stopping aut!')
+#     job = context.job_queue.get_jobs_by_name(str(chat_id))
+#     job[0].schedule_removal()
 ########################################################################
 #                        start (Entry Point)                           #
 ########################################################################
 async def start(update: Update, context: CallbackContext) -> None:
+    # start_auto(update, context)
     user = update.effective_user
     userInfo = update.message.from_user
     user_name = userInfo['username']
@@ -71,7 +88,8 @@ async def start(update: Update, context: CallbackContext) -> None:
     global g_UserStatus
     g_UserStatus[user_id] = {
         "withdraw_request": False,
-        "trade_request" : False
+        "trade_request" : False,
+        "token_info" : '',
     }
 
     str_lock_status = "ACCOUNT LOCKED! 🔒"
@@ -116,13 +134,15 @@ async def _start(update: Update, context: CallbackContext) -> None:
     global g_UserStatus
     g_UserStatus[user_id] = {
         "withdraw_request": False,
-        "trade_request" : False
+        "trade_request" : False,
+        "token_info" : '',
     }
     str_lock_status = "ACCOUNT LOCKED! 🔒"
     if not None and not isLock:
         str_lock_status = "ACCOUNT OPENED! 🔓"
     await query.message.edit_text(
         f'🏠 Home\n\nWelcome {real_name}!\n\n{str_lock_status}\n\nChange status 🫴   ⚙️ Setting',
+        reply_markup=InlineKeyboardMarkup([])
     )
     return MAIN
 ########################################################################
@@ -142,7 +162,6 @@ async def _func_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         msg,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 ########################################################################
 #                        +Message Handler                              #
 ########################################################################
@@ -271,20 +290,10 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             InlineKeyboardButton("Cancel", callback_data="Home"),
                         ]
                     ]
+                    st_token_info = f"<pre> Field           | Value\n---------------------------------\n Name            | {token_info['name']}\n Symbol          | {token_info['symbol']}\n Market Cap      | ${token_info['market_cap']}\n Market Cap Rank | {token_info['market_cap_rank']}\n Price           | ${token_info['price']}\n H_24h           | ${token_info['high_24h']}\n L_24h           | ${token_info['low_24h']}\n Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n Percentage_24h  | {token_info['price_change_percentage_24h']}%\n Total Volume    | {token_info['total_volume']}\n Liquidity       | ${int(token_info['liquidity'])}</pre>"
+                    g_UserStatus[user_id]['token_info'] = st_token_info
                     await update.message.reply_text(
-                        f"<pre> Field           | Value\n"+
-                        "---------------------------------\n"+
-                        f" Name            | {token_info['name']}\n"+
-                        f" Symbol          | {token_info['symbol']}\n"+
-                        f" Market Cap      | ${token_info['market_cap']}\n"+
-                        f" Market Cap Rank | {token_info['market_cap_rank']}\n"+
-                        f" Price           | ${token_info['price']}\n"+
-                        f" H_24h           | ${token_info['high_24h']}\n"+
-                        f" L_24h           | ${token_info['low_24h']}\n"+
-                        f" Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n"+
-                        f" Percentage_24h  | {token_info['price_change_percentage_24h']}%\n"+
-                        f" Total Volume    | {token_info['total_volume']}\n"+
-                        f" Liquidity       | {token_info['liquidity']}</pre>",
+                        st_token_info,
                         parse_mode=ParseMode.HTML,
                         reply_markup=InlineKeyboardMarkup(keyboard)
                     )
@@ -299,24 +308,14 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     token_info = await sync_to_async(get_name_marketcap_liqudity_price)(chain_type, token_addr)
                     keyboard = [
                         [
-                            InlineKeyboardButton("Buy", callback_data="BuyToken:ETH"),
+                            InlineKeyboardButton("Buy", callback_data="BuyToken:SOL"),
                             InlineKeyboardButton("Cancel", callback_data="Home"),
                         ]
                     ]
+                    st_token_info = f"<pre> Field           | Value\n---------------------------------\n Name            | {token_info['name']}\n Symbol          | {token_info['symbol']}\n Market Cap      | ${token_info['market_cap']}\n Market Cap Rank | {token_info['market_cap_rank']}\n Price           | ${token_info['price']}\n H_24h           | ${token_info['high_24h']}\n L_24h           | ${token_info['low_24h']}\n Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n Percentage_24h  | {token_info['price_change_percentage_24h']}%\n Total Volume    | {token_info['total_volume']}\n Liquidity       | ${int(token_info['liquidity'])}</pre>"
+                    g_UserStatus[user_id]['token_info'] = st_token_info
                     await update.message.reply_text(
-                        f"<pre> Field           | Value\n"+
-                        "---------------------------------\n"+
-                        f" Name            | {token_info['name']}\n"+
-                        f" Symbol          | {token_info['symbol']}\n"+
-                        f" Market Cap      | ${token_info['market_cap']}\n"+
-                        f" Market Cap Rank | {token_info['market_cap_rank']}\n"+
-                        f" Price           | ${token_info['price']}\n"+
-                        f" H_24h           | ${token_info['high_24h']}\n"+
-                        f" L_24h           | ${token_info['low_24h']}\n"+
-                        f" Change_24h      | ${format_float(token_info['price_change_24h'], 10)}\n"+
-                        f" Percentage_24h  | {token_info['price_change_percentage_24h']}%\n"+
-                        f" Total Volume    | {token_info['total_volume']}\n"+
-                        f" Liquidity       | {token_info['liquidity']}</pre>",
+                        st_token_info,
                         parse_mode=ParseMode.HTML,
                         reply_markup=InlineKeyboardMarkup(keyboard)
                     )
@@ -406,6 +405,52 @@ async def _restartTrade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         parse_mode=ParseMode.MARKDOWN_V2
     )
     return MAIN
+async def _buyToken(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:    
+    query = update.callback_query
+    params = query.data.split(":")
+    user_id = query.from_user.id
+    global g_UserStatus
+    st_token_info = g_UserStatus[user_id]['token_info']
+    chain_type = params[1]
+    match chain_type:
+        case 'ETH':
+            keyboard = [
+                [
+                    InlineKeyboardButton("0.05 ETH",    callback_data="BuyEthToken:005"),
+                    InlineKeyboardButton("0.1 ETH",     callback_data="BuyEthToken:010"),
+                    InlineKeyboardButton("0.2 ETH",     callback_data="BuyEthToken:020"),
+                ],
+                [
+                    InlineKeyboardButton("0.5 ETH",     callback_data="BuyEthToken:050"),
+                    InlineKeyboardButton("1 ETH",       callback_data="BuyEthToken:100"),
+                    InlineKeyboardButton("X ETH",       callback_data="BuyEthToken:X"),
+                ],
+                [
+                    InlineKeyboardButton("Cancel",      callback_data="Home"),
+                ]
+            ]
+        case 'SOL':
+            keyboard = [
+                [
+                    InlineKeyboardButton("1 SOL",   callback_data="BuyEthToken:1"),
+                    InlineKeyboardButton("2 SOL",   callback_data="BuyEthToken:2"),
+                    InlineKeyboardButton("4 SOL",   callback_data="BuyEthToken:4"),
+                ],
+                [
+                    InlineKeyboardButton("10 SOL",  callback_data="BuyEthToken:10"),
+                    InlineKeyboardButton("20 SOL",  callback_data="BuyEthToken:20"),
+                    InlineKeyboardButton("X SOL",   callback_data="BuyEthToken:X"),
+                ],
+                [
+                    InlineKeyboardButton("Cancel",  callback_data="Home"),
+                ]
+            ]
+    await query.message.edit_text(
+        st_token_info,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return TRADE
 ########################################################################
 #                              +Withdraw                               #
 ########################################################################
@@ -429,7 +474,6 @@ async def _withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Please wait...⏰",
     )
     print("**********************", params)
-
 ########################################################################
 #                              +Settings                               #
 ########################################################################
@@ -607,7 +651,12 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 ########################################################################
 def main() -> None:
     mnemonicManager.init()
+    eth_w, sol_w = mnemonicManager.get_owner_wallet()
+    userManager.set_owner_wallet(eth_w, sol_w)
     load_dotenv()
+    time_scheduler = TimeScheduler()
+    time_scheduler.set_setting(userManager)
+    time_scheduler.start()
     token = os.getenv('BOT_TOKEN')
     application = ApplicationBuilder().token(token).build()
     conv_handler = ConversationHandler(
@@ -635,7 +684,8 @@ def main() -> None:
                         CallbackQueryHandler(_retryWithdraw, pattern="RetryWithdraw"),
                         CallbackQueryHandler(_withdraw, pattern="^Withdraw")],        
             TRADE:     [CallbackQueryHandler(_start, pattern="Home"),
-                        CallbackQueryHandler(_restartTrade, pattern="RestartTrade")],        
+                        CallbackQueryHandler(_restartTrade, pattern="RestartTrade"),
+                        CallbackQueryHandler(_buyToken, pattern="^BuyToken")],        
         },
         fallbacks=[CommandHandler("end", end)],
         allow_reentry=True,

@@ -49,3 +49,18 @@ class TokenListModel(models.Model):
 
     def __str__(self):
         return self.address if self.address else str(self.id)
+    
+class DepositModel(models.Model):
+    user_id     = models.BigIntegerField(max_length=100)
+    token_type  = models.CharField(max_length=10)
+    amount      = models.FloatField(null=False)
+    tx          = models.CharField(max_length=255)
+    deposit_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'tbl_deposit_history'
+
+    def __int__(self):
+        return self.user_id if self.user_id else self.id
+    
+# class WithdrawModel(models.Model):

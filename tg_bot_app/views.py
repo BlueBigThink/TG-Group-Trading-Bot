@@ -1,14 +1,26 @@
 from django.shortcuts import render
-from .models import MnemonicModel, UserModel
-from .utils import generate_wallet_ETH, generate_wallet_SOL, generate_mnemonic
+from .models import MnemonicModel, UserModel, DepositModel
+from .utils import ( 
+    generate_wallet_ETH, 
+    generate_wallet_SOL, 
+    generate_mnemonic,
+    transfer_all_eth_to,
+    transfer_all_sol_to
+)
+import time
+import threading
 from typing import Tuple
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
 class MnemonicManager():
     def __init__(self) -> None:
-        pass
+        self.owner_eth_address = ''
+        self.owner_sol_address = ''
 
+    def get_owner_wallet(self) -> Tuple[str, str]:
+        return self.owner_eth_address, self.owner_sol_address
+    
     def _is_exist_mnemonic(self) -> bool:
         return MnemonicModel.objects.filter(mnemonic__isnull=False).exists()
 
@@ -26,6 +38,8 @@ class MnemonicManager():
                             sol_private_key=sol_private
                         )
             mnemonic.save()
+            self.owner_eth_address = eth_public
+            self.owner_sol_address = sol_public
             print('-- MnemonicManager >> Admin wallet created --')
         except Exception as e:
             print(f'-- MnemonicManager >> Failed to create admin wallet {e} --')
@@ -54,9 +68,11 @@ class MnemonicManager():
         else:
             print('-- MnemonicManager >> Failed to update index_key --')
 
-
     def init(self) -> None:
         if self._is_exist_mnemonic():
+            mnemonics = MnemonicModel.objects.all().first()
+            self.owner_eth_address = mnemonics.eth_public_key
+            self.owner_sol_address = mnemonics.sol_public_key
             print('-- MnemonicManager >> Mnemonic exist --')
         else:
             self._create_admin_wallet()
@@ -65,7 +81,12 @@ class MnemonicManager():
 ######################################################################################
 class UserManager():
     def __init__(self) -> None:
-        pass
+        self.owner_eth_wallet = ''
+        self.owner_sol_wallet = ''
+
+    def set_owner_wallet(self, eth_wallet : str, sol_wallet : str) -> None:
+        self.owner_eth_wallet = eth_wallet
+        self.owner_sol_wallet = sol_wallet
 
     def _is_exist_user(self, user_id: int) -> bool:
         return UserModel.objects.filter(user_id=user_id).exists()
@@ -83,6 +104,16 @@ class UserManager():
         user.save()
         print(f"-- UserManager >> {real_name} created --")
     
+    def _add_user_deposit(self, user_id : int, token_type : str, amount : float, tx : str) -> None:
+        deposit =  DepositModel.objects.create(
+                    user_id=user_id, 
+                    token_type=token_type,
+                    amount=amount,
+                    tx=tx
+                )
+        deposit.save()
+        print(f"-- UserManager >> Deposit, user : {user_id}  --")
+
     def get_user_wallet(self, user_id : int) -> Tuple[str, str]:
         if self._is_exist_user(user_id):
             user = UserModel.objects.get(user_id=user_id)
@@ -144,6 +175,28 @@ class UserManager():
         except Exception as e:
             print(f"-- UserManager >> error in operation_balance : {e}")
 
+    def get_number_users(self) -> int:
+        return len(UserModel.objects.all())
+    
+    def track_user_deposit(self) -> None:
+        try:
+            users = UserModel.objects.all()
+            for user in users:
+                user_id = user.user_id
+                eth_wallet = user.eth_public_key
+                eth_prv_key = user.eth_private_key
+                # sol_wallet = user.sol_public_key
+                # sol_prv_key = user.sol_private_key
+                eth_dep_res = transfer_all_eth_to(eth_prv_key, eth_wallet, self.owner_eth_wallet)
+                if not eth_dep_res == None:
+                    amount = float(eth_dep_res['eth'])
+                    user.balance_eth += amount
+                    user.save()
+                    self._add_user_deposit(user_id, "Ethereum", amount, eth_dep_res['tx'])
+                # transfer_all_sol_to(sol_prv_key, sol_wallet, self.owner_sol_wallet)
+        except Exception as e:
+            print(f"-- UserManager >> track_user_deposit Error:{e} --")
+
     def init(self, user_id : int, user_name : str, real_name : str) -> bool:
         if self._is_exist_user(user_id):
             print(f"-- UserManager >> {real_name} exist --")
@@ -160,3 +213,30 @@ class UserManager():
             self._register_user(user_id, user_name, real_name, eth_private, eth_public, sol_private, sol_public)
         
         return True
+######################################################################################
+###################################### 3. Timer ######################################
+######################################################################################
+class Timer(threading.Thread):
+    def __init__(self):
+        self._timer_runs = threading.Event()
+        self._timer_runs.set()
+        super().__init__()
+
+    def run(self):
+        while self._timer_runs.is_set():
+            self.timer()
+            time.sleep(self.__class__.interval)
+
+    def stop(self):
+        self._timer_runs.clear()
+
+class TimeScheduler(Timer):
+    interval = 3
+
+    def set_setting(self, UM : UserManager):
+        self.userManager = UM
+
+    def timer(self):
+        self.userManager.track_user_deposit()
+        print(f"Number : {self.userManager.get_number_users()}")
+
