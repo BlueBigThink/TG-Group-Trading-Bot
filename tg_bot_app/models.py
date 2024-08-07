@@ -90,6 +90,7 @@ class TradeModel(models.Model):
     buy_sell_status     = models.IntegerField(default=True) # buy : 1, sell : 0, failed : -1
     buy_tx              = models.CharField(max_length=255, null=False)
     sell_tx             = models.CharField(max_length=255, null=True, blank=True)
+    user_contribution   = models.TextField(default="")
     buy_at              = models.DateTimeField(auto_now_add=True)
     sell_at             = models.DateTimeField(auto_now=True)
     
