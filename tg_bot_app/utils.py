@@ -16,7 +16,7 @@ import requests
 import time
 import json
 import base64
-from uniswap import Uniswap
+
 from jupiter_python_sdk.jupiter import Jupiter, Jupiter_DCA
 from typing import Tuple, Dict, Any
 
