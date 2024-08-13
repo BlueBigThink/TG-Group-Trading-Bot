@@ -16,7 +16,7 @@ import requests
 import time
 import json
 import base64
-from uniswap import Uniswap
+
 from jupiter_python_sdk.jupiter import Jupiter, Jupiter_DCA
 from typing import Tuple, Dict, Any
 
@@ -313,6 +313,7 @@ def transfer_balance_eth_to(sender_private_key : str, sender : str, receiver : s
         tx_hash = f"{eth_tx_uri}{tx_reception.transactionHash.hex()}"
         print(f"-- transfer_balance_eth_to : {tx_hash} --")
         return {
+            'status' : tx_reception['status'],
             'amount' : amount,
             'tx' : tx_hash
         }

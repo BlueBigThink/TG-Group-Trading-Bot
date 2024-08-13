@@ -21,6 +21,7 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHANNEL_ID = os.getenv('CHANNEL_ID')
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
@@ -190,6 +191,16 @@ class UserManager():
             return user.balance_eth, user.balance_sol, user.profit_eth, user.profit_sol
         return None, None, None, None
     
+    def get_all_user_status(self) -> List[Dict[str, Any]]:
+        users = UserModel.objects.all()
+        status = []
+        for user in users:
+            status.append({
+                "name" : user.real_name,
+                "status" : user.account_lock
+            })
+        return status
+    
     def operation_balance(self, user_id : int, op_type : str, token_type : str, amount : int) -> None:
         try:
             user = UserModel.objects.get(user_id=user_id)
@@ -219,6 +230,20 @@ class UserManager():
             user.save()
         except Exception as e:
             print(f"-- UserManager >> error in operation_balance : {e}")
+    
+    def user_invest_profit(self, user_id : int, token_type : str, amount : float) -> None:
+        try:
+            user = UserModel.objects.get(user_id=user_id)
+            match token_type:
+                case 'ETH':
+                    user.profit_eth -= amount
+                    user.balance_eth += amount
+                case 'SOL':
+                    user.profit_sol -= amount
+                    user.balance_sol += amount
+            user.save()
+        except Exception as e:
+            print(f"-- UserManager >> user_invest_profit Error : {e}")
 
     def get_number_users(self) -> int:
         return len(UserModel.objects.all())
@@ -244,27 +269,47 @@ class UserManager():
             print(f"-- UserManager >> track_user_deposit Error:{e} --")
 
     def send_bot_message(self, user_id : int, message : str) -> None:
-        data = {
-            "chat_id" : user_id,
-            "text" : message
-        }
-        txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(txt_url, data)
+        try :
+            data = {
+                "chat_id" : user_id,
+                "text" : message
+            }
+            txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            requests.post(txt_url, data)
+        except Exception as e:
+            print(f"-- send_bot_message >> Error : {e} --")
 
-    def user_withdraw_profit(self, user_id : int, token_type : str, percent : int, receiver : str) -> Dict[str, Any]:
-        _, _, profit_eth, profit_sol = self.get_user_balance(user_id)
+    def send_message_group(self, message : str) -> None:
+        try :
+            txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHANNEL_ID}&text={message}&parse_mode=HTML&disable_web_page_preview=True"
+            print(txt_url)
+            requests.get(txt_url)
+        except Exception as e:
+            print(f"-- send_message_group >> Error : {e} --")
+
+    def user_withdraw_balance(self, user_id : int, token_type : str, amount : float, receiver : str) -> None:
         mnemonicManager = MnemonicManager()
         eth_prv_key, sol_prv_key = mnemonicManager.get_owner_prv_key_from_db()
+        user = UserModel.objects.get(user_id=user_id)
         match token_type:
             case 'ETH':
-                amount = profit_eth * (percent / 100)
                 resp_tx = transfer_balance_eth_to(eth_prv_key, self.owner_eth_wallet, receiver, amount)
-                user = UserModel.objects.get(user_id=user_id)
-                user.profit_eth -= amount
-                user.save()
-                withdraw = WithdrawModel.objects.create(user_id=user_id, token_type='ETH', amount=amount, tx=resp_tx['tx'])
-                withdraw.save()
-                return resp_tx
+                if resp_tx is not None and resp_tx['status'] == 1:
+                    if user.profit_eth >= amount:
+                        user.profit_eth -= amount
+                    else:
+                        user.profit_eth = 0
+                        user.balance_eth -= (amount - user.profit_eth)
+                    user.save()
+                    withdraw = WithdrawModel.objects.create(user_id=user_id, token_type='ETH', amount=amount, tx=resp_tx['tx'])
+                    withdraw.save()
+                    str_message = f"Hi, {user.real_name}!\n✅ You withdraw {amount} ETH\n{resp_tx['tx']}"
+                    self.send_message_group(str_message)
+                    self.send_bot_message(user_id, str_message)
+                else:
+                    str_message = f"Hi, {user.real_name}!\n❌ Sorry! Your withdraw transaction failed!"
+                    self.send_message_group(str_message)
+                    self.send_bot_message(user_id, str_message)
             # case 'SOL':
             #     amount = profit_sol * (percent / 100)
             #     resp_tx = transfer_balance_sol_to()
@@ -307,7 +352,7 @@ class UserManager():
             if swap_res['status'] == 1:
                 self._add_profit_by_contribution(contribution, token_type, in_native_amount)
                 trade.buy_sell_status = 0
-                message = f"✅ You selled {sell_token_addr} \nGet {in_native_amount} {token_type}\n{swap_res['tx']}"
+                message = f"✅ You selled {sell_token_addr} \nGot {in_native_amount} {token_type}\n{swap_res['tx']}"
             else:
                 self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
                 trade.buy_sell_status = -1
@@ -317,6 +362,7 @@ class UserManager():
             trade.sell_tx = swap_res['tx']
             trade.save()
             self.send_bot_message(user_id, message)
+            self.send_message_group(message)
             print("Swap Result >> ",swap_res)
 
     def trade_buy_token(self, user_id : int, token_type : str, token_amount : float, buy_token_addr : str, slippage : float) -> None:
@@ -351,6 +397,7 @@ class UserManager():
                     trade.save()
                     message = f"✅ You bought {swap_res['token_amount']} by {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
                     self.send_bot_message(user_id, message)
+                    self.send_message_group(message)
                     print("Swap Result >> ",swap_res)
 
             # elif token_type == 'SOL':
