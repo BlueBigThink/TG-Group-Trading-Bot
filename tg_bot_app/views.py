@@ -266,6 +266,7 @@ class UserManager():
                     user.save()
                     self._add_user_deposit(user_id, "Ethereum", amount, eth_dep_res['tx'])
                     self.send_bot_message(user_id, f"✅ You Deposit {amount} ETH")
+                    self.send_message_group(f"<b>-------- {user.real_name} --------\n✅  Deposit {amount} ETH</b>")
                 # transfer_all_sol_to(sol_prv_key, sol_wallet, self.owner_sol_wallet)
         except Exception as e:
             print(f"-- UserManager >> track_user_deposit Error:{e} --")
@@ -347,26 +348,30 @@ class UserManager():
         trade = trades[0]
         if token_type == 'ETH':
             swap_res = swap_tokens_to_eth(sell_token_addr, eth_prv_key, self.owner_eth_wallet)
-            in_gas_fee = swap_res['in_gas_fee']
-            in_native_amount = swap_res['in_native_amount']
-            contribution = json.loads(trade.user_contribution)
-            print("***********", contribution)
-            if swap_res['status'] == 1:
-                self._add_profit_by_contribution(contribution, token_type, in_native_amount)
-                trade.buy_sell_status = 0
-                message = f"✅ You selled {sell_token_addr} \nGot {in_native_amount} {token_type}\n{swap_res['tx']}"
+            if swap_res:
+                in_gas_fee = swap_res['in_gas_fee']
+                in_native_amount = swap_res['in_native_amount']
+                contribution = json.loads(trade.user_contribution)
+                print("***********", contribution)
+                if swap_res['status'] == 1:
+                    self._add_profit_by_contribution(contribution, token_type, in_native_amount)
+                    trade.buy_sell_status = 0
+                    name, _, _ = get_token_name_symbol_decimals(sell_token_addr)
+                    message = f"<b>✅ Selled {name}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                else:
+                    self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
+                    trade.buy_sell_status = -1
+                    message = f"❌ Trade failed : {swap_res['tx']}"
+                trade.in_gas_fee = in_gas_fee
+                trade.in_native_amount = in_native_amount
+                trade.sell_tx = swap_res['tx']
+                trade.save()
+                self.send_bot_message(user_id, message)
+                self.send_message_group(message)
+                print("Swap Result >> ",swap_res)
             else:
-                self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
-                trade.buy_sell_status = -1
-                message = f"❌ Trade failed : {swap_res['tx']}"
-            trade.in_gas_fee = in_gas_fee
-            trade.in_native_amount = in_native_amount
-            trade.sell_tx = swap_res['tx']
-            trade.save()
-            self.send_bot_message(user_id, message)
-            self.send_message_group(message)
-            print("Swap Result >> ",swap_res)
-
+                message = f"❌ Trade failed (No Fee)"
+                self.send_message_group(message)
     def trade_buy_token(self, user_id : int, token_type : str, token_amount : float, buy_token_addr : str, slippage : float) -> None:
         try :
             print("***** trade_buy_token >> **", user_id, token_type, token_amount, buy_token_addr)
@@ -377,8 +382,9 @@ class UserManager():
             eth_prv_key, sol_prv_key = mnemonicManager.get_owner_prv_key_from_db()
             if token_type == 'ETH':
                 swap_res = swap_eth_to_tokens(buy_token_addr, real_eth_sol_amount, eth_prv_key, self.owner_eth_wallet, slippage)
-                self._change_deposit_by_contribution(contribution, token_type, -token_amount)
+                print(swap_res)
                 if swap_res:
+                    self._change_deposit_by_contribution(contribution, token_type, -token_amount)
                     if swap_res['status'] == 1 :
                         b_s_status = 1
                         self._change_deposit_by_contribution(contribution, token_type, -swap_res['out_gas_fee'])
@@ -397,7 +403,7 @@ class UserManager():
                                 user_contribution=json.dumps(contribution)
                             )
                     trade.save()
-                    name, _, _ = get_token_name_symbol_decimals
+                    name, _, _ = get_token_name_symbol_decimals(buy_token_addr)
                     message = f"✅ Bought {format_float(swap_res['token_amount'], 3)} {name}\nBy {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
                     self.send_bot_message(user_id, message)
                     self.send_message_group(message)
@@ -457,7 +463,7 @@ class Timer(threading.Thread):
         self._timer_runs.clear()
 
 class TimeScheduler(Timer):
-    interval = 10
+    interval = 15
 
     def set_setting(self, UM : UserManager):
         self.userManager = UM
