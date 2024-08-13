@@ -6,6 +6,7 @@ from solders.transaction import VersionedTransaction
 from solana.rpc.types import TxOpts
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
+from spl.token.async_client import AsyncToken
 
 from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes, Bip39MnemonicGenerator, Bip39WordsNum
 from web3 import Web3
@@ -16,6 +17,7 @@ import requests
 import time
 import json
 import base64
+from spl.token.constants import TOKEN_PROGRAM_ID
 
 from jupiter_python_sdk.jupiter import Jupiter, Jupiter_DCA
 from typing import Tuple, Dict, Any
@@ -32,8 +34,8 @@ WETH_ADDRESS = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
 
 RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
 # client = Client("https://api.devnet.solana.com")
-# eth_tx_uri = "https://sepolia.etherscan.io/tx/"
-# eth_addr_uri = "https://sepolia.etherscan.io/address/"
+eth_tx_uri = "https://sepolia.etherscan.io/tx/"
+eth_addr_uri = "https://sepolia.etherscan.io/address/"
 ######################## Main Net ########################
 # UNISWAP_ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
 # UNISWAP_FACTORY_ADDRESS = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f'
@@ -41,8 +43,8 @@ RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
 
 # RPC_URL = f'https://mainnet.infura.io/v3/{INFURA_ID}'
 client = Client("https://api.mainnet-beta.solana.com")
-eth_tx_uri = "https://etherscan.io/tx/"
-eth_addr_uri = "https://etherscan.io/address/"
+# eth_tx_uri = "https://etherscan.io/tx/"
+# eth_addr_uri = "https://etherscan.io/address/"
 
 sol_token_uri = "https://solscan.io/token/"
 sol_tx_uri = "https://solscan.io/tx/"
@@ -51,6 +53,9 @@ sol_acc_uri = "https://solscan.io/account/"
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 UNISWAP_ROUTER_CONTRACT = web3.eth.contract(address=UNISWAP_ROUTER_ADDRESS, abi=UNISWAP_ROUTER_ABI)
 
+def format_float(value, decimals):
+    formatted_value = f"{value:.{decimals}f}".rstrip('0').rstrip('.')
+    return formatted_value
 ##################################################################################################################################################################
 ## Wallet Functions ##############################################################################################################################################
 ##################################################################################################################################################################
@@ -111,8 +116,10 @@ def is_valid_ethereum_address(address : str) -> bool:
         print("is_valid_ethereum_address >> ",e)
         return False
 
+def is_valid_solana_token_address(address : str) -> bool:
+    return False
+
 def is_valid_ethereum_token_address(address : str) -> bool:
-    return True #TODO
     try :
         token_name, _, _ = get_token_name_symbol_decimals(address)
         if token_name:
@@ -167,7 +174,8 @@ def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Di
         'taxes': '🅑 0.0%  🅢 0.0%',
         'liquidity' : 0
     }
-    liquidity = 0
+
+    chain_type = chain_type.lower()
     match chain_type:
         case 'eth':
             chain_name = 'ethereum'
@@ -250,6 +258,10 @@ def get_eth_amount_out_from_token(token_address : str, token : float) -> int:
     amount_out = amounts_out[-1]
     print(f"-- get_amount_out_from_token >> {amounts_out} --")
     return amount_out
+
+async def get_sol_token_decimals(self, address : str) -> int:
+    token = AsyncToken("", Pubkey(base58.b58decode(address.encode())), program_id=TOKEN_PROGRAM_ID, payer=base58.b58decode(""))
+    return (await token.get_mint_info()).decimals
 ##################################################################################################################################################################
 ## Trade Functions ###############################################################################################################################################
 ##################################################################################################################################################################

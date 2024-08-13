@@ -2,6 +2,7 @@ from django.shortcuts import render
 from .models import MnemonicModel, UserModel, DepositModel, WithdrawModel, TradeModel
 from django.db.models import Sum, Count
 from .utils import ( 
+    format_float,
     generate_wallet_ETH, 
     generate_wallet_SOL, 
     generate_mnemonic,
@@ -10,7 +11,8 @@ from .utils import (
     get_balanceOf_ERC20,
     transfer_all_sol_to,
     swap_eth_to_tokens,
-    swap_tokens_to_eth
+    swap_tokens_to_eth,
+    get_token_name_symbol_decimals
 )
 import time
 import threading
@@ -395,7 +397,8 @@ class UserManager():
                                 user_contribution=json.dumps(contribution)
                             )
                     trade.save()
-                    message = f"✅ You bought {swap_res['token_amount']} by {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
+                    name, _, _ = get_token_name_symbol_decimals
+                    message = f"✅ Bought {format_float(swap_res['token_amount'], 3)} {name}\nBy {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
                     self.send_bot_message(user_id, message)
                     self.send_message_group(message)
                     print("Swap Result >> ",swap_res)

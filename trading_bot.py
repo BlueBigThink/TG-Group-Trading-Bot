@@ -32,6 +32,7 @@ from tg_bot_app.utils import (
     is_valid_ethereum_address,
     is_valid_ethereum_token_address,
     is_valid_solana_address,
+    is_valid_solana_token_address,
     get_name_marketcap_liqudity_price,
     get_token_amount_out_from_eth,
     get_eth_amount_out_from_token
@@ -96,8 +97,8 @@ async def start(update: Update, context: CallbackContext) -> None:
         "withdraw_amount": 0,
         "invest_request": False,
         "invest_token": "",
-
-        "trade_request" : False,
+        "token_address_request" : False,
+        "token_chain_type" : "",
         "token_info" : '',
         "token_input" : False,
         "token_input_type" : '',
@@ -416,6 +417,242 @@ async def _invest_handle_message(update: Update, context: ContextTypes.DEFAULT_T
         await sync_to_async(userManager.user_invest_profit)(user_id, token_type, amount)
         return MAIN
 ########################################################################
+#                               +Trade                                 #
+########################################################################
+async def user_trade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    userInfo = update.message.from_user
+    user_id = userInfo['id']
+    first_name = userInfo['first_name']
+    last_name = userInfo['last_name']
+    real_name = "{} {}".format(first_name, last_name)
+    isLock = await sync_to_async(userManager.get_user_lock)(user_id)
+    if isLock:
+        await update.message.reply_text(
+            "⚠️ Your account is Locked! 🔒",
+        )
+        return MAIN
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Buy", callback_data="BuyToken"),
+            InlineKeyboardButton("Sell", callback_data="SellToken"),
+        ]
+    ]
+    await update.message.reply_text(
+        f"<b>-------- {real_name} ---------\n🔁 Trade\n"+
+        f"👇 Do you want to buy or sell?</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return TRADE
+async def _user_buy_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: 
+    query = update.callback_query
+    userInfo = query.from_user
+    user_id = userInfo['id']
+    first_name = userInfo['first_name']
+    last_name = userInfo['last_name']
+    real_name = "{} {}".format(first_name, last_name)
+
+    global g_UserStatus
+    g_UserStatus[user_id]['token_address_request'] = True
+
+    await query.message.edit_text(
+        f"<b>-------- {real_name} ---------\n🔁 Buy\n"+
+        f"Please input token address on ETH or SOL</b>",
+        parse_mode=ParseMode.HTML
+    )
+    return TRADE
+async def _select_token_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: 
+    query = update.callback_query
+    params = query.data.split(":")
+    print(params)
+    user_id = query.from_user.id
+    token_addr = params[2]
+    global g_UserStatus
+    st_token_info = g_UserStatus[user_id]['token_info']
+    user_cnt, total_eth, total_sol = await sync_to_async(userManager.get_trade_able_token)()
+    chain_type = params[1]
+
+    match chain_type:
+        case 'ETH':
+            st_available = f"\nPlease select the correct amount of ETH\n{format_float(total_eth, 4)} ETH of {user_cnt} users is available!"
+            keyboard = [
+                [
+                    InlineKeyboardButton("0.05 ETH",    callback_data=f"TradeBuy:ETH:0.05:{token_addr}"),
+                    InlineKeyboardButton("0.1 ETH",     callback_data=f"TradeBuy:ETH:0.10:{token_addr}"),
+                    InlineKeyboardButton("0.2 ETH",     callback_data=f"TradeBuy:ETH:0.20:{token_addr}"),
+                ],
+                [
+                    InlineKeyboardButton("0.5 ETH",     callback_data=f"TradeBuy:ETH:0.50:{token_addr}"),
+                    InlineKeyboardButton("1 ETH",       callback_data=f"TradeBuy:ETH:1.00:{token_addr}"),
+                    InlineKeyboardButton("X ETH",       callback_data=f"TradeBuy:ETH:X:{token_addr}"),
+                ]
+            ]
+        case 'SOL':
+            st_available = f"\nPlease select the correct amount of SOL\n{format_float(total_sol, 3)} SOL of {user_cnt} users is available!"
+            keyboard = [
+                [
+                    InlineKeyboardButton("1 SOL",   callback_data=f"TradeBuy:SOL:1:{token_addr}"),
+                    InlineKeyboardButton("2 SOL",   callback_data=f"TradeBuy:SOL:2:{token_addr}"),
+                    InlineKeyboardButton("4 SOL",   callback_data=f"TradeBuy:SOL:4:{token_addr}"),
+                ],
+                [
+                    InlineKeyboardButton("10 SOL",  callback_data=f"TradeBuy:SOL:10:{token_addr}"),
+                    InlineKeyboardButton("20 SOL",  callback_data=f"TradeBuy:SOL:20:{token_addr}"),
+                    InlineKeyboardButton("X SOL",   callback_data=f"TradeBuy:SOL:X:{token_addr}"),
+                ]
+            ]
+    await query.message.edit_text(
+        st_token_info + st_available,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return TRADE
+async def _tradeBuy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    params = query.data.split(":")
+    user_id = query.from_user.id
+    token_type = params[1]
+    token_amount = params[2]
+    token_addr = params[3]
+    user_cnt, total_eth, total_sol = await sync_to_async(userManager.get_trade_able_token)()
+    global g_UserStatus
+    st_available = ''
+    match token_type:
+        case 'ETH':
+            st_available = f"\n{format_float(total_eth, 4)} ETH of {user_cnt} users is available!"
+        case 'SOL':
+            st_available = f"\n{format_float(total_sol, 3)} SOL of {user_cnt} users is available!"
+    print("************************",params)
+    if token_amount == 'X' :
+        g_UserStatus[user_id]['token_input'] = True
+        g_UserStatus[user_id]['token_input_type'] = token_type
+        g_UserStatus[user_id]['token_input_addr'] = token_addr
+        await query.message.edit_text(
+            f"<b>Please Input the correct {token_type} amount{st_available}</b>",
+            parse_mode = ParseMode.HTML
+        )
+    else :
+        if (token_type == 'ETH' and float(token_amount) > total_eth) or (token_type == 'SOL' and float(token_amount) > total_sol): 
+            user_initialize(user_id)
+            await query.message.edit_text(
+                f"You can't trade with {token_amount} {token_type}! Please retry from begin!",
+            )
+            return MAIN
+
+        g_UserStatus[user_id]['slippage_request'] = True
+        g_UserStatus[user_id]['slippage_meta'] = f"{token_type}:{token_addr}:{token_amount}"
+
+        await query.message.edit_text(
+            f"<b>Please input slippage.\nDefault : 2%</b>",
+            parse_mode = ParseMode.HTML
+        )
+    return TRADE
+
+async def _trade_handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: 
+    text = update.message.text
+    userInfo = update.message.from_user
+    user_id = userInfo['id']
+    print("======================",text)
+    global g_UserStatus
+    if g_UserStatus[user_id]['token_address_request']:
+        token_type = ""
+
+        is_trading = await sync_to_async(userManager.is_trading_token)(text)
+        if is_trading:
+            await update.message.reply_text(
+                f"<b>Someone is already trading this token.\nPlease try other token address.</b>",
+                parse_mode=ParseMode.HTML,
+            )
+            return TRADE
+
+        if is_valid_ethereum_token_address(text):
+            token_type = "ETH"
+        if is_valid_solana_token_address(text):
+            token_type = "SOL"
+        
+        if token_type == "":
+            await update.message.reply_text(
+                "❌ Input correct token address!",
+            )
+            return TRADE
+        token_address = text
+        user_cnt, total_eth, total_sol = await sync_to_async(userManager.get_trade_able_token)()
+        token_info = await sync_to_async(get_name_marketcap_liqudity_price)(token_type, token_address)
+        keyboard = [
+            [
+                InlineKeyboardButton("Buy", callback_data=f"SelectTokenAmount:{token_type}:{token_address}"),
+            ]
+        ]
+        st_token_info = f"<B>⌛️ {token_info['name']} ({token_info['symbol']}) 🔗 {token_info['token_group']}\n{token_info['CA']}\n{token_info['LP']}\n\nLiquidity: {token_info['liquidity']}\n\n🧢 Market Cap | {token_info['market_cap']}\n⚖️ Taxes | {token_info['taxes']}\n\nCurrent slippage: 2%\nIn reserve : {format_float(total_eth, 4)} ETH for {user_cnt} users is available</B>"
+        g_UserStatus[user_id]['token_info'] = st_token_info
+        g_UserStatus[user_id]['token_address_request'] = False
+        await update.message.reply_text(
+            st_token_info,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return TRADE
+    if g_UserStatus[user_id]['token_input']:
+        token_amount = 0
+        try :
+            token_amount = float(text)
+        except Exception as e:
+            print(f"-- _trade_handle_message : Error : {e} --")
+            await update.message.reply_text(
+                f"Input Correct Number!",
+            )
+            return TRADE
+        if token_amount == 0:
+            await update.message.reply_text(
+                f"Input Correct Number!",
+            )
+            return TRADE
+
+        token_type = g_UserStatus[user_id]['token_input_type']
+        if (token_type == 'ETH' and float(token_amount) > total_eth) or (token_type == 'SOL' and float(token_amount) > total_sol): 
+            user_initialize(user_id)
+            await update.message.reply_text(
+                f"You can't trade with {token_amount} {token_type}! Please retry from begin!",
+            )
+            return MAIN
+        token_addr = g_UserStatus[user_id]['token_input_addr']        
+        g_UserStatus[user_id]['slippage_request'] = True
+        g_UserStatus[user_id]['slippage_meta'] = f"{token_type}:{token_addr}:{token_amount}"
+
+        await update.message.reply_text(
+            f"<b>Please input slippage.\nDefault : 2%</b>",
+            parse_mode = ParseMode.HTML
+        )
+        return TRADE
+    if g_UserStatus[user_id]['slippage_request']:
+        slippage = 2
+        try :
+            slippage = (int(text) % 100)
+        except Exception as e:
+            print(f"-- _trade_handle_message : Error : {e} --")
+            await update.message.reply_text(
+                f"Input Number from 0 to 100",
+            )
+            return TRADE
+        meta = g_UserStatus[user_id]['slippage_meta']
+        token_info = g_UserStatus[user_id]['token_info']
+        user_initialize(user_id)
+        params = meta.split(':')
+        token_type = params[0]
+        token_addr = params[1]
+        token_amount = params[2]
+        str_buy_token = f"{token_info}\n\n\n{token_type} : {token_amount}\nSlippage : {slippage}%\nPlease wait...⏰ This might take a few mins!"
+        await update.message.reply_text(
+            str_buy_token,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+        await sync_to_async(userManager.trade_buy_token)(user_id, token_type, float(token_amount), token_addr, slippage)
+        return MAIN
+########################################################################
 #                        +Message Handler                              #
 ########################################################################
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None: 
@@ -426,20 +663,6 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 ##################################################################################################################################################################
 ##################################################################################################################################################################
     match text:
-        case '🔄 Buy':
-            isLock = await sync_to_async(userManager.get_user_lock)(user_id)
-            if isLock:
-                await update.message.reply_text(
-                    "⚠️ Your account is Locked! 🔒",
-                )
-                return MAIN
-            g_UserStatus[user_id]['trade_request'] = True
-            st_wallet = "*Input Token address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
-            st_wallet=st_wallet.replace('.', '\.')
-            await update.message.reply_text(
-                f"*Please trade here\!*\n*__Trade with only deposit\nProfit ➡️ Deposit\(No Fee\)__*\n{st_wallet}",
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
         case '🔄 Sell':
             trades = await sync_to_async(userManager.get_user_sell_tokens)(user_id)
             for trade in trades:
@@ -491,7 +714,7 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             g_UserStatus[user_id]['slippage_meta'] = f"{token_type}:{token_addr}:{amount}"
 
             await update.message.reply_text(
-                f"Please input slippage.\nDefault : 2%",
+                f"<b>Please input slippage.\nDefault : 2%</b>",
             )
             return MAIN
         except Exception as e:
@@ -579,143 +802,6 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         reply_markup=InlineKeyboardMarkup(keyboard)
                      )
                 return TRADE
-##################################################################################################################################################################
-##################################################################################################################################################################
-    if g_UserStatus[user_id]['slippage_request']:
-        g_UserStatus[user_id]['slippage_request'] = False
-        meta = g_UserStatus[user_id]['slippage_meta']
-        g_UserStatus[user_id]['slippage_meta'] = ""
-        params = meta.split(':')
-        token_type = params[0]
-        token_addr = params[1]
-        token_amount = params[2]
-        slippage = 2
-        try :
-            slippage = (int(text) % 100)
-        except Exception as e:
-            print(f"-- Message Handler : Error : {e} --")
-            await update.message.reply_text(
-                f"Input Number from 0 to 100\nPlease retry from begin",
-            )
-            return MAIN
-        str_buy_token = f"Token : {token_addr}\n{token_type} : {token_amount}\nSlippage : {slippage}%\nPlease wait. This might take get mins!"
-        await update.message.reply_text(
-            str_buy_token,
-        )
-        await sync_to_async(userManager.send_message_group)(str_buy_token)
-
-        await sync_to_async(userManager.trade_buy_token)(user_id, token_type, float(token_amount), token_addr, slippage)
-        return MAIN
-########################################################################
-#                               +Trade                                 #
-########################################################################
-async def _restartTrade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    global g_UserStatus
-    g_UserStatus[user_id]['trade_request'] = True
-    st_wallet = "*Input token address*\n```ex:\neth/0x934Eb8.....K1dF46\nsol/EDJJhDO.....MLT8FUm```"
-    st_wallet=st_wallet.replace('.', '\.')
-    await query.message.edit_text(
-        f"*Please trade here\!*\n*__Trade with only deposit\nProfit ➡️ Deposit\(No Fee\)__*\n{st_wallet}",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    return MAIN
-async def _buyToken(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  
-    print("buytoken again-------------")  
-    query = update.callback_query
-    params = query.data.split(":")
-    user_id = query.from_user.id
-    token_addr = params[2]
-    global g_UserStatus
-    st_token_info = g_UserStatus[user_id]['token_info']
-    user_cnt, total_eth, total_sol = await sync_to_async(userManager.get_trade_able_token)()
-    chain_type = params[1]
-    match chain_type:
-        case 'ETH':
-            st_available = f"\nPlease select the correct amount of ETH\n{format_float(total_eth, 4)} ETH of {user_cnt} users is available!"
-            keyboard = [
-                [
-                    InlineKeyboardButton("0.05 ETH",    callback_data=f"TradeBuy:ETH:0.05:{token_addr}"),
-                    InlineKeyboardButton("0.1 ETH",     callback_data=f"TradeBuy:ETH:0.10:{token_addr}"),
-                    InlineKeyboardButton("0.2 ETH",     callback_data=f"TradeBuy:ETH:0.20:{token_addr}"),
-                ],
-                [
-                    InlineKeyboardButton("0.5 ETH",     callback_data=f"TradeBuy:ETH:0.50:{token_addr}"),
-                    InlineKeyboardButton("1 ETH",       callback_data=f"TradeBuy:ETH:1.00:{token_addr}"),
-                    InlineKeyboardButton("X ETH",       callback_data=f"TradeBuy:ETH:X:{token_addr}"),
-                ],
-                [
-                    InlineKeyboardButton("Cancel",      callback_data="Home"),
-                ]
-            ]
-        case 'SOL':
-            st_available = f"\nPlease select the correct amount of SOL\n{format_float(total_sol, 3)} SOL of {user_cnt} users is available!"
-            keyboard = [
-                [
-                    InlineKeyboardButton("1 SOL",   callback_data=f"TradeBuy:SOL:1:{token_addr}"),
-                    InlineKeyboardButton("2 SOL",   callback_data=f"TradeBuy:SOL:2:{token_addr}"),
-                    InlineKeyboardButton("4 SOL",   callback_data=f"TradeBuy:SOL:4:{token_addr}"),
-                ],
-                [
-                    InlineKeyboardButton("10 SOL",  callback_data=f"TradeBuy:SOL:10:{token_addr}"),
-                    InlineKeyboardButton("20 SOL",  callback_data=f"TradeBuy:SOL:20:{token_addr}"),
-                    InlineKeyboardButton("X SOL",   callback_data=f"TradeBuy:SOL:X:{token_addr}"),
-                ],
-                [
-                    InlineKeyboardButton("Cancel",  callback_data="Home"),
-                ]
-            ]
-    await query.message.edit_text(
-        st_token_info + st_available,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return TRADE
-
-async def _tradeBuy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    params = query.data.split(":")
-    user_id = query.from_user.id
-    token_type = params[1]
-    token_amount = params[2]
-    token_addr = params[3]
-    user_cnt, total_eth, total_sol = await sync_to_async(userManager.get_trade_able_token)()
-    global g_UserStatus
-    st_available = ''
-    match token_type:
-        case 'ETH':
-            st_available = f"\n{format_float(total_eth, 4)} ETH of {user_cnt} users is available!"
-        case 'SOL':
-            st_available = f"\n{format_float(total_sol, 3)} SOL of {user_cnt} users is available!"
-    print("************************",params)
-    if token_amount == 'X' :
-        g_UserStatus[user_id]['withdraw_request'] = False
-        g_UserStatus[user_id]['trade_request'] = False
-        g_UserStatus[user_id]['slippage_request'] = False
-        g_UserStatus[user_id]['token_input'] = True
-        g_UserStatus[user_id]['slippage_request'] = False
-        g_UserStatus[user_id]['token_input_type'] = token_type
-        g_UserStatus[user_id]['token_input_addr'] = token_addr
-        await query.message.edit_text(
-            f"Please Input the correct {token_type} amount{st_available}",
-            reply_markup=InlineKeyboardMarkup([])
-        )
-    else :
-        if (token_type == 'ETH' and float(token_amount) > total_eth) or (token_type == 'SOL' and float(token_amount) > total_sol): 
-            await query.message.edit_text(
-                f"You can't trade with {token_amount} {token_type}! Please retry from begin!",
-            )
-            return MAIN
-
-        g_UserStatus[user_id]['slippage_request'] = True
-        g_UserStatus[user_id]['slippage_meta'] = f"{token_type}:{token_addr}:{token_amount}"
-
-        await query.message.edit_text(
-            f"Please input slippage.\nDefault : 2%",
-        )
-    return MAIN
 
 async def _tradeSell(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -737,11 +823,6 @@ def _trade_sell_token(user_id : int, token_type : str, token_address : str):
     asyncio.run(sync_to_async(userManager.trade_sell_token)(user_id, token_type, token_address))
 
 ########################################################################
-#                              +Settings                               #
-########################################################################
-# await sync_to_async(userManager.operation_balance)(user_id, op_type, token_type, amount)
-
-########################################################################
 #                                 +End                                 #
 ########################################################################
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -752,6 +833,24 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         "Bye! I hope we can talk again some day.", reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
+
+def user_initialize(user_id : int) -> None:
+    global g_UserStatus
+    g_UserStatus[user_id] = {
+        "withdraw_request": False,
+        "withdraw_token": "",
+        "withdraw_amount": 0,
+        "invest_request": False,
+        "invest_token": "",
+        "token_address_request" : False,
+        "token_chain_type" : "",
+        "token_info" : '',
+        "token_input" : False,
+        "token_input_type" : '',
+        "token_input_addr" : '',
+        "slippage_request" : False,      
+        "slippage_meta" : '',      
+    }
 ########################################################################
 #                           Main Function                              #
 ########################################################################
@@ -774,6 +873,7 @@ def main() -> None:
                       CommandHandler("users", user_status),
                       CommandHandler("withdraw", user_withdraw),
                       CommandHandler("invest", user_invest),
+                      CommandHandler("trade", user_trade),
                       CommandHandler("end", end)],
         states={
             MAIN:       [],
@@ -781,8 +881,9 @@ def main() -> None:
                         MessageHandler(filters.TEXT, _withdraw_handle_message)],        
             INVEST:    [CallbackQueryHandler(_user_invest_amount, pattern="^Invest"),
                         MessageHandler(filters.TEXT, _invest_handle_message)],        
-            TRADE:     [CallbackQueryHandler(_restartTrade, pattern="RestartTrade"),
-                        CallbackQueryHandler(_buyToken, pattern="^BuyToken"),
+            TRADE:     [CallbackQueryHandler(_user_buy_token, pattern="BuyToken"),
+                        CallbackQueryHandler(_select_token_amount, pattern="^SelectTokenAmount"),
+                        MessageHandler(filters.TEXT, _trade_handle_message),
                         CallbackQueryHandler(_tradeBuy, pattern="^TradeBuy"),
                         CallbackQueryHandler(_tradeSell, pattern="^TradeSell")],        
         },
