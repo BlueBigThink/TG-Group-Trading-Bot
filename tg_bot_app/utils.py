@@ -25,7 +25,7 @@ from typing import Tuple, Dict, Any
 from .abi import UNISWAP_FACTORY_ABI, UNISWAP_PAIR_ABI, UNISWAP_ROUTER_ABI, ERC20_ABI
 ETH_DEPOSIT_MIN = 0.001
 SOL_DEPOSIT_MIN = 0.01
-INFURA_ID = "e254d35aa64b4c16816163824d9d5b83"
+INFURA_ID = "98cfc59c4cdf46e69aec779b57b175db"
 
 ######################## Test Net ########################
 UNISWAP_ROUTER_ADDRESS = '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008'
