@@ -1,16 +1,31 @@
-class User:
-    def init(self,id) -> None:
-        self.Id = id
-        self.EVM_Address = None       #evm地址
-        self.EVM_key = None           #evm私钥
-        self.SOL_Adress = None        #SOL 地址
-        self.SOL_key = None           #实际私钥
-        self.SOL_RAW = None           #原始list sol
-        self.SOL_key_export = None    #导出用私钥
-        self.mode = misc.BSC               #什么链
-        self.gas = 10                 #Gas费用
-        self.slippage = 0.1           #滑点
-        self.Language = misc.CN            #语言
-        self.cprice = 0.05     #默认价格
-        self.inviter = None
-        self.history = {misc.BSC:{},misc.SOL:{}}
+import asyncio
+import requests
+from typing import Tuple
+
+async def getLP_SOL(mint1: str, mint2: str, solPrice: float = 150.0) -> Tuple[str, float, float]:
+    url = f"https://api-v3.raydium.io/pools/info/mint?mint1={mint1}&mint2={mint2}&poolType=all&poolSortField=liquidity&sortType=desc&pageSize=100&page=1"
+    lpAddres = ''
+    liquidity = 0.0
+    name = ''
+    symbol = ''
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            pair_data_arr = data['data']['data']
+            for pair_data in pair_data_arr:
+                if pair_data['type'] == 'Standard' and 'lpMint' in pair_data:
+                    lpAddres = pair_data['lpMint']['address']
+                    if pair_data['mintA']['symbol'] == "WSOL":
+                        name = pair_data['mintB']['name']
+                        symbol = pair_data['mintB']['symbol']
+                    else:
+                        name = pair_data['mintA']['name']
+                        symbol = pair_data['mintA']['symbol']
+                if 'tvl' in pair_data:
+                    liquidity += float(pair_data['tvl'])
+    except Exception as e:
+        print(e)
+    return lpAddres, name, symbol, "{:,.2f}".format(liquidity), round(liquidity/solPrice, 2)
+
+asyncio.run(getLP_SOL('So11111111111111111111111111111111111111112', '4v3UTV9jibkhPfHi5amevropw6vFKVWo7BmxwQzwEwq6', 142.85))

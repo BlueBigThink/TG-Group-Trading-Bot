@@ -75,7 +75,6 @@ g_UserStatus = {}
 ########################################################################
 async def start(update: Update, context: CallbackContext) -> None:
     chat_type = update.message.chat.type
-    # print("=========================", chat_type)
     # if chat_type  == 'group':
     #     print("Can't accept the public command")
     #     return
