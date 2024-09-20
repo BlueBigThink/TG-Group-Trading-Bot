@@ -10,9 +10,12 @@ from .utils import (
     transfer_balance_eth_to,
     get_balanceOf_ERC20,
     transfer_all_sol_to,
+    transfer_balance_sol_to,
     swap_eth_to_tokens,
     swap_tokens_to_eth,
-    get_token_name_symbol_decimals
+    get_token_name_symbol_decimals,
+    swap_sol_to_tokens,
+    swap_tokens_to_sol
 )
 import time
 import threading
@@ -21,6 +24,7 @@ from typing import Tuple, Dict, Any, List
 import os
 import json
 from dotenv import load_dotenv
+import asyncio
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
@@ -257,17 +261,24 @@ class UserManager():
                 user_id = user.user_id
                 eth_wallet = user.eth_public_key
                 eth_prv_key = user.eth_private_key
-                # sol_wallet = user.sol_public_key
-                # sol_prv_key = user.sol_private_key
                 eth_dep_res = transfer_all_eth_to(eth_prv_key, eth_wallet, self.owner_eth_wallet)
                 if not eth_dep_res == None:
                     amount = float(eth_dep_res['eth'])
                     user.balance_eth += amount
                     user.save()
                     self._add_user_deposit(user_id, "Ethereum", amount, eth_dep_res['tx'])
-                    self.send_bot_message(user_id, f"✅ You Deposit {amount} ETH")
+                    # self.send_bot_message(user_id, f"✅ You Deposit {amount} ETH")
                     self.send_message_group(f"<b>-------- {user.real_name} --------\n✅  Deposit {amount} ETH</b>")
-                # transfer_all_sol_to(sol_prv_key, sol_wallet, self.owner_sol_wallet)
+                sol_wallet = user.sol_public_key
+                sol_prv_key = user.sol_private_key
+                sol_dep_res = transfer_all_sol_to(sol_prv_key, sol_wallet, self.owner_sol_wallet)
+                if not sol_dep_res == None and sol_dep_res['status'] == 1:
+                    amount = float(sol_dep_res['sol'])
+                    user.balance_sol += amount
+                    user.save()
+                    self._add_user_deposit(user_id, "SOL", amount, sol_dep_res['tx'])
+                    # self.send_bot_message(user_id, f"✅ You Deposit {amount} SOL")
+                    self.send_message_group(f"<b>-------- {user.real_name} --------\n✅  Deposit {amount} SOL</b>")
         except Exception as e:
             print(f"-- UserManager >> track_user_deposit Error:{e} --")
 
@@ -303,6 +314,8 @@ class UserManager():
                     else:
                         user.profit_eth = 0
                         user.balance_eth -= (amount - user.profit_eth)
+                        if user.balance_eth < 0:
+                            user.balance_eth = 0
                     user.save()
                     withdraw = WithdrawModel.objects.create(user_id=user_id, token_type='ETH', amount=amount, tx=resp_tx['tx'])
                     withdraw.save()
@@ -313,9 +326,26 @@ class UserManager():
                     str_message = f"Hi, {user.real_name}!\n❌ Sorry! Your withdraw transaction failed!"
                     self.send_message_group(str_message)
                     self.send_bot_message(user_id, str_message)
-            # case 'SOL':
-            #     amount = profit_sol * (percent / 100)
-            #     resp_tx = transfer_balance_sol_to()
+            case 'SOL':
+                resp_tx = transfer_balance_sol_to(sol_prv_key, self.owner_sol_wallet, receiver, amount)
+                if resp_tx is not None and resp_tx['status'] == 1:
+                    if user.profit_sol >= amount:
+                        user.profit_sol -= amount
+                    else:
+                        user.profit_sol = 0
+                        user.balance_sol -= (amount - user.profit_sol)
+                        if user.balance_sol < 0:
+                            user.balance_sol = 0
+                    user.save()
+                    withdraw = WithdrawModel.objects.create(user_id=user_id, token_type='SOL', amount=amount, tx=resp_tx['tx'])
+                    withdraw.save()
+                    str_message = f"Hi, {user.real_name}!\n✅ You withdraw {amount} SOL\n{resp_tx['tx']}"
+                    self.send_message_group(str_message)
+                    self.send_bot_message(user_id, str_message)
+                else:
+                    str_message = f"Hi, {user.real_name}!\n❌ Sorry! Your withdraw transaction failed!"
+                    self.send_message_group(str_message)
+                    self.send_bot_message(user_id, str_message)
 
     def _change_deposit_by_contribution(self, contribution : Dict[str, Any], token_type: str, token_amount : float) -> None:
         for user_cont in contribution:
@@ -339,8 +369,8 @@ class UserManager():
                     user.profit_sol += delta_bal
             user.save()
 
-    def trade_sell_token(self, user_id : int, token_type : str, sell_token_addr : str) -> None:
-        print("***** trade_sell_token **", user_id, token_type, sell_token_addr)
+    def trade_sell_token(self, user_id : int, token_type : str, sell_token_addr : str, slippage: float, token_symbol: str) -> None:
+        print("***** trade_sell_token **", user_id, token_type, sell_token_addr, slippage)
         mnemonicManager = MnemonicManager()
         eth_prv_key, sol_prv_key = mnemonicManager.get_owner_prv_key_from_db()
         # trade = TradeModel.objects.get(user_id=user_id, token_address=sell_token_addr)
@@ -356,8 +386,8 @@ class UserManager():
                 if swap_res['status'] == 1:
                     self._add_profit_by_contribution(contribution, token_type, in_native_amount)
                     trade.buy_sell_status = 0
-                    name, _, _ = get_token_name_symbol_decimals(sell_token_addr)
-                    message = f"<b>✅ Selled {name}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                    # name, _, _ = get_token_name_symbol_decimals(sell_token_addr)
+                    message = f"<b>✅ Selled {token_symbol}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
                 else:
                     self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
                     trade.buy_sell_status = -1
@@ -372,7 +402,30 @@ class UserManager():
             else:
                 message = f"❌ Trade failed (No Fee)"
                 self.send_message_group(message)
-    def trade_buy_token(self, user_id : int, token_type : str, token_amount : float, buy_token_addr : str, slippage : float) -> None:
+        elif token_type == 'SOL':
+            swap_res = asyncio.run(swap_tokens_to_sol(sell_token_addr,sol_prv_key, self.owner_sol_wallet, slippage))
+            print(swap_res)
+            if swap_res:
+                in_gas_fee = swap_res['in_gas_fee']
+                in_native_amount = swap_res['in_native_amount']
+                contribution = json.loads(trade.user_contribution)
+                print("***********", contribution)
+                if swap_res['status'] == 1:
+                    in_native_amount = swap_res['in_native_amount']
+                    self._add_profit_by_contribution(contribution, token_type, in_native_amount)
+                    trade.buy_sell_status = 0
+                    message = f"<b>✅ Selled {token_symbol}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                else:
+                    self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
+                    trade.buy_sell_status = -1
+                    message = f"❌ Trade failed"
+                trade.in_gas_fee = in_gas_fee
+                trade.in_native_amount = in_native_amount
+                trade.sell_tx = swap_res['tx']
+                trade.save()
+                self.send_message_group(message)
+                print("Swap Result >> ",swap_res)
+    def trade_buy_token(self, user_id : int, token_type : str, token_amount : float, buy_token_addr : str, slippage : float, token_symbol: str) -> None:
         try :
             print("***** trade_buy_token >> **", user_id, token_type, token_amount, buy_token_addr)
             contribution = self._calculate_contribution(token_type)
@@ -403,19 +456,52 @@ class UserManager():
                                 user_contribution=json.dumps(contribution)
                             )
                     trade.save()
-                    name, _, _ = get_token_name_symbol_decimals(buy_token_addr)
-                    message = f"✅ Bought {format_float(swap_res['token_amount'], 3)} {name}\nBy {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
-                    self.send_bot_message(user_id, message)
+                    # name, _, _ = get_token_name_symbol_decimals(buy_token_addr)
+                    message = f"✅ Bought {format_float(swap_res['token_amount'], 3)} {token_symbol}\nBy {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
+                    # self.send_bot_message(user_id, message)
                     self.send_message_group(message)
                     print("Swap Result >> ",swap_res)
 
-            # elif token_type == 'SOL':
-            #     swap_res = swap_sol_to_tokens(buy_token_addr, token_amount, sol_prv_key, self.owner_sol_wallet)
+            elif token_type == 'SOL':
+                swap_res = asyncio.run(swap_sol_to_tokens(buy_token_addr, real_eth_sol_amount, sol_prv_key, slippage))
+                print(swap_res)
+                if swap_res:
+                    out_gas_fee = swap_res['out_gas_fee']
+                    self._change_deposit_by_contribution(contribution, token_type, -out_gas_fee)
+                    if swap_res['status'] == 1 :
+                        b_s_status = 1
+                        self._change_deposit_by_contribution(contribution, token_type, -token_amount)
+                    else:
+                        b_s_status = -1
+                    trade = TradeModel.objects.create(
+                                user_id=user_id, 
+                                token_address=buy_token_addr, 
+                                token_symbol=token_symbol,
+                                token_amount=swap_res['token_amount'], 
+                                chain_type=token_type, 
+                                out_native_amount=swap_res['out_native_amount'],
+                                out_gas_fee=swap_res['out_gas_fee'],
+                                buy_sell_status=b_s_status,
+                                buy_tx=swap_res['tx'],
+                                user_contribution=json.dumps(contribution)
+                            )
+                    trade.save()
+                    message = f"✅ Bought {format_float(swap_res['token_amount'], 3)} {token_symbol}\nBy {swap_res['out_native_amount']} {token_type}\n{swap_res['tx']}"
+                    # self.send_bot_message(user_id, message)
+                    self.send_message_group(message)
+                    print("Swap Result >> ",swap_res)
+
         except Exception as e:
             print("-- trade_buy_token : Error ", e)
+            message = "Trade operation failed"
+            self.send_message_group(message)
 
     def is_trading_token(self, token_address : str) -> bool:
-        return TradeModel.objects.filter(token_address=token_address, buy_sell_status=1).exists()
+        return TradeModel.objects.filter(token_address=token_address).exclude(buy_sell_status=0).exists()
+
+    def get_amount_by_token_address(self,user_id: int, token_address : str) -> float:
+        trade = TradeModel.objects.filter(user_id=user_id,token_address=token_address).exclude(buy_sell_status=0)[0]
+        return trade.token_amount, trade.token_symbol
 
     def get_user_sell_tokens(self, user_id : int) -> List[Dict[str, Any]]:
         list = []
@@ -424,6 +510,7 @@ class UserManager():
             list.append({
                 "chain_type" : trade.chain_type,
                 "token_address" : trade.token_address,
+                "token_symbol" : trade.token_symbol,
                 "token_amount" : trade.token_amount,
                 "buy_tx" : trade.buy_tx
             })

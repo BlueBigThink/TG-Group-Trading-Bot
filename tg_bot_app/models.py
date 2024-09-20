@@ -81,6 +81,7 @@ class WithdrawModel(models.Model):
 class TradeModel(models.Model):
     user_id             = models.BigIntegerField(max_length=100)
     token_address       = models.CharField(max_length=255, null=False)
+    token_symbol        = models.CharField(max_length=50, default='')
     token_amount        = models.FloatField(default=0)
     chain_type          = models.CharField(max_length=10)
     out_native_amount   = models.FloatField(null=False)

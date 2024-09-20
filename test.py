@@ -177,7 +177,9 @@ class SOL_client:
             print(f"get_sol_per_token {e}")
             return 0
 
-    async def get_token_list(self, pub_key : str):
+    async def get_token_list(self, pub_key : str=""):
+        if pub_key == "":
+            pub_key = self.pub_key
         po = await self.client.get_token_accounts_by_owner_json_parsed(Pubkey.from_string(pub_key),TokenAccountOpts(program_id=Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")),commitment=Confirmed)
         return po.to_json()
     
@@ -295,18 +297,18 @@ class SOL_client:
     #             continue
     #     return 0
     
-    # async def get_token_balance(self,address):
-    #     tl = await self.get_token_list()
-    #     pp = json.loads(tl)
+    async def get_token_balance(self,address):
+        tl = await self.get_token_list()
+        pp = json.loads(tl)
         
-    #     for i in pp["result"]["value"]:
-    #         try: 
-    #             if i["account"]["data"]["parsed"]["info"]["mint"] == address:
-    #                 return i["account"]["data"]["parsed"]["info"]["tokenAmount"]["uiAmount"]
-    #         except Exception as e:
-    #             print(e)
-    #             continue
-    #     return 0
+        for i in pp["result"]["value"]:
+            try: 
+                if i["account"]["data"]["parsed"]["info"]["mint"] == address:
+                    return i["account"]["data"]["parsed"]["info"]["tokenAmount"]["uiAmount"]
+            except Exception as e:
+                print(e)
+                continue
+        return 0
     
     # async def buy_token(self,token_contract,amount):
     #     try:
@@ -359,8 +361,10 @@ class SOL_client:
     #         return False
 
 
-sol_client = SOL_client("2JNKp9G6aT3wmqr2xu3nRs9bQHNuvcrnVVJtBzqH58WPvVTS4Cb9K3tHGhhKa5GrudP9pprHRELfwYmX2b4jetup", "8aRNkTR2QCdvT3X48PXvRj1WHDofeUxSkiALnUxc1YdQ", "https://api.mainnet-beta.solana.com")
+sol_client = SOL_client("B7retLYFbq2w34nRRddG4S7oUJSmQHhpZHCsWkgSUT2Kqp6uiSqtJ83cRbjvKNRN21ySsuvxnVN3ZchJoPrzgja", "7VAMJuHeM1FvR5fkkku56bTTu7TmUJjMPprW56muzLhv", "https://api.mainnet-beta.solana.com")
+# sol_client = SOL_client("", "", "https://api.mainnet-beta.solana.com")
 async def test():
-    print(await sol_client.get_token_list(""))
+    print(await sol_client.get_token_balance("DtR4D9FtVoTX2569gaL837ZgrB6wNjj6tkmnX9Rdk9B2"))
+    # print(await sol_client.get_token_list("MJKqp326RZCHnAAbew9MDdui3iCKWco7fsK9sVuZTX2"))
 
 asyncio.run(test())

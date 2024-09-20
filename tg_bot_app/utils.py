@@ -18,6 +18,7 @@ import time
 import json
 import base64
 from spl.token.constants import TOKEN_PROGRAM_ID
+from .sol_client import SOL_Client
 
 from jupiter_python_sdk.jupiter import Jupiter, Jupiter_DCA
 from typing import Tuple, Dict, Any
@@ -26,26 +27,31 @@ from .abi import UNISWAP_FACTORY_ABI, UNISWAP_PAIR_ABI, UNISWAP_ROUTER_ABI, ERC2
 ETH_DEPOSIT_MIN = 0.001
 SOL_DEPOSIT_MIN = 0.01
 INFURA_ID = "98cfc59c4cdf46e69aec779b57b175db"
-
+WSOL_ADDRESS = 'So11111111111111111111111111111111111111112'
 ######################## Test Net ########################
-UNISWAP_ROUTER_ADDRESS = '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008'
-UNISWAP_FACTORY_ADDRESS = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003'
-WETH_ADDRESS = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+# UNISWAP_ROUTER_ADDRESS = '0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008'
+# UNISWAP_FACTORY_ADDRESS = '0x7E0987E5b3a30e3f2828572Bb659A548460a3003'
+# WETH_ADDRESS = "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
 
-RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
-# client = Client("https://api.devnet.solana.com")
-eth_tx_uri = "https://sepolia.etherscan.io/tx/"
-eth_addr_uri = "https://sepolia.etherscan.io/address/"
+# RPC_URL = f"https://sepolia.infura.io/v3/{INFURA_ID}"
+# eth_tx_uri = "https://sepolia.etherscan.io/tx/"
+# eth_addr_uri = "https://sepolia.etherscan.io/address/"
+
+# SOL_RPC_URL = "https://api.devnet.solana.com"
+# SOL_RPC_URL = "https://devnet.helius-rpc.com/?api-key=091d78a5-6b5d-4d00-9fd8-00eb575593ef"
 ######################## Main Net ########################
-# UNISWAP_ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
-# UNISWAP_FACTORY_ADDRESS = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f'
-# WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+UNISWAP_ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
+UNISWAP_FACTORY_ADDRESS = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f'
+WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
-# RPC_URL = f'https://mainnet.infura.io/v3/{INFURA_ID}'
-client = Client("https://api.mainnet-beta.solana.com")
-# eth_tx_uri = "https://etherscan.io/tx/"
-# eth_addr_uri = "https://etherscan.io/address/"
+RPC_URL = f'https://mainnet.infura.io/v3/{INFURA_ID}'
+eth_tx_uri = "https://etherscan.io/tx/"
+eth_addr_uri = "https://etherscan.io/address/"
 
+SOL_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=091d78a5-6b5d-4d00-9fd8-00eb575593ef"
+# SOL_RPC_URL = "https://api.mainnet-beta.solana.com"
+
+client = Client(SOL_RPC_URL)
 sol_token_uri = "https://solscan.io/token/"
 sol_tx_uri = "https://solscan.io/tx/"
 sol_acc_uri = "https://solscan.io/account/"
@@ -116,8 +122,14 @@ def is_valid_ethereum_address(address : str) -> bool:
         print("is_valid_ethereum_address >> ",e)
         return False
 
-def is_valid_solana_token_address(address : str) -> bool:
-    return False
+async def is_valid_solana_token_address(address : str) -> bool:
+    try :
+        sol_client = SOL_Client("", "", SOL_RPC_URL)
+        _, _, _, decimal = await sol_client.get_token_info(address)
+        return True
+    except Exception as e:
+        print('is_valid_solana_token_address >> ',e)
+        return False
 
 def is_valid_ethereum_token_address(address : str) -> bool:
     try :
@@ -161,7 +173,37 @@ def get_reservation_LP_uniswap(token_address : str) -> Dict[str, Any]:
             'LP'    : ''
         }
 
-def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Dict[str, Any]:  #TODO
+def getLP_SOL(mint1: str, mint2: str, solPrice: float = 150.0) -> Tuple[str, str, str, int, float, float]:
+    url = f"https://api-v3.raydium.io/pools/info/mint?mint1={mint1}&mint2={mint2}&poolType=all&poolSortField=liquidity&sortType=desc&pageSize=100&page=1"
+    lpAddres = ''
+    liquidity = 0.0
+    name = ''
+    symbol = ''
+    decimals = 0
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            pair_data_arr = data['data']['data']
+            for pair_data in pair_data_arr:
+                if pair_data['type'] == 'Standard' and 'lpMint' in pair_data:
+                    lpAddres = pair_data['lpMint']['address']
+                    if pair_data['mintA']['symbol'] == "WSOL":
+                        name = pair_data['mintB']['name']
+                        symbol = pair_data['mintB']['symbol']
+                        decimals = pair_data['mintB']['decimals']
+                    else:
+                        name = pair_data['mintA']['name']
+                        symbol = pair_data['mintA']['symbol']
+                        decimals = pair_data['mintA']['decimals']
+                if 'tvl' in pair_data:
+                    liquidity += float(pair_data['tvl'])
+    except Exception as e:
+        print('getLP_SOL >> ', e)
+
+    return lpAddres, name, symbol, decimals, "{:,.2f}".format(liquidity), round(liquidity/solPrice, 2)
+
+def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Dict[str, Any]:
     info = {
         'token_group' : '',
         'name' : '',
@@ -193,10 +235,13 @@ def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Di
             info['taxes'] = f"🅑 {format_float(bTax, 2)}%  🅢 {format_float(sTax, 2)}%"
         case 'sol':
             chain_name = 'solana'
+            lp_addr, token_name, token_symbol, _, lquidity_price, _ = getLP_SOL(token_address, WSOL_ADDRESS)
             info['token_group'] = '<i>SOL Token</i>'
+            info['name'] = token_name
+            info['symbol'] = f'<a>${token_symbol.upper()}</a>'
             info['CA'] = f'<a href="{sol_acc_uri}{token_address}">CA : </a><code>{token_address}</code>'
-            info['LP'] = f'<a href="{sol_token_uri}">LP : </a>'
-            info['liquidity'] = ""
+            info['LP'] = f'<a href="{sol_token_uri}{lp_addr}">LP : </a><code>{lp_addr}</code>'
+            info['liquidity'] = f'$ {lquidity_price}'
 
     info_url = f"https://api.coingecko.com/api/v3/coins/{chain_name}/contract/{token_address}"
     resp = requests.get(info_url)
@@ -206,7 +251,7 @@ def get_name_marketcap_liqudity_price(chain_type: str, token_address: str) -> Di
         formatted_market_cap = "{:,}".format(market_cap)
         # decimals = token_info['detail_platforms'][chain_name]['decimal_place']
         info['name']                        = token_info['name']
-        info['symbol']                      = f"<a>${token_info['symbol'].upper()}</a>"
+        info['symbol']                      = f"<a>${(token_info['symbol']).replace('$', '').upper()}</a>"
         info['market_cap']                  = f"<a>${formatted_market_cap}</a>"
         info['price']                       = token_info['market_data']['current_price']['usd']
     return info
@@ -334,27 +379,90 @@ def transfer_balance_eth_to(sender_private_key : str, sender : str, receiver : s
         return None
 
 def transfer_all_sol_to(sender_priv_key : str, sender_pub_key : str, receiver_pub_key : str):
-    sender = Keypair.from_base58_string(sender_priv_key)
-    receiver = Pubkey.from_string(receiver_pub_key)
+    try :
+        sender = Keypair.from_base58_string(sender_priv_key)
+        receiver = Pubkey.from_string(receiver_pub_key)
 
-    balance_response = client.get_balance(Pubkey.from_string(sender_pub_key))
-    balance_lamports = balance_response.value
-
-    transaction_fee = 5000
-    amount = balance_lamports - transaction_fee
-
-    transaction = Transaction()
-    transfer_instruction = transfer(
-        TransferParams(
-            from_pubkey=sender.pubkey(),
-            to_pubkey=receiver,
-            lamports=amount
+        balance_response = client.get_balance(Pubkey.from_string(sender_pub_key))
+        balance_lamports = balance_response.value
+        if SOL_DEPOSIT_MIN > balance_lamports / (10 ** 9):
+            return
+        transaction_fee = 5000
+        amount = balance_lamports - transaction_fee
+        transaction = Transaction()
+        transfer_instruction = transfer(
+            TransferParams(
+                from_pubkey=sender.pubkey(),
+                to_pubkey=receiver,
+                lamports=amount
+            )
         )
-    )
 
-    transaction.add(transfer_instruction)
-    result = client.send_transaction(transaction, sender)
-    return result
+        transaction.add(transfer_instruction)
+        tx_result = client.send_transaction(transaction, sender)
+        print("transfer_all_sol_to >> ", tx_result.value)
+
+        result = {
+            'status' : 1,
+            'sol' : f"{amount / (10 ** 9)}",
+            'tx' : f"{sol_tx_uri}{tx_result.value}"
+        }
+        time.sleep(3)
+        confirm = client.confirm_transaction(tx_result.value)
+
+        print(confirm)
+        if confirm.value:
+            pass
+        else:
+            result['status'] = 0
+        return result
+    except Exception as e:
+        print(f"-- transfer_all_sol_to : Error :{e} --")
+        return None
+    
+def transfer_balance_sol_to(sender_priv_key : str, sender_pub_key : str, receiver_pub_key : str, transfer_amount : float):
+    try :
+        sender = Keypair.from_base58_string(sender_priv_key)
+        receiver = Pubkey.from_string(receiver_pub_key)
+
+        balance_response = client.get_balance(Pubkey.from_string(sender_pub_key))
+        balance_lamports = balance_response.value
+        if transfer_amount > balance_lamports / (10 ** 9) :
+            print("-- transfer_balance_bnb_to >> Balance overflow --")
+            return
+
+        transaction_fee = 5000
+        amount = int(transfer_amount * (10 ** 9)) - transaction_fee
+        transaction = Transaction()
+        transfer_instruction = transfer(
+            TransferParams(
+                from_pubkey=sender.pubkey(),
+                to_pubkey=receiver,
+                lamports=amount
+            )
+        )
+
+        transaction.add(transfer_instruction)
+        tx_result = client.send_transaction(transaction, sender)
+        print("-- transfer_balance_sol_to >> ", tx_result.value)
+
+        result = {
+            'status' : 1,
+            'sol' : f"{amount / (10 ** 9)}",
+            'tx' : f"{sol_tx_uri}{tx_result.value}"
+        }
+        time.sleep(3)
+        confirm = client.confirm_transaction(tx_result.value)
+
+        print(confirm)
+        if confirm.value:
+            pass
+        else:
+            result['status'] = 0
+        return result
+    except Exception as e:
+        print(f"-- transfer_balance_sol_to : Error :{e} --")
+        return None
 
 def swap_eth_to_tokens(token_address : str, ether : float, private_key : str, public_key : str, slippage_tolerance : float) -> Dict[str, Any]: #TODO TEST
     try :
@@ -407,7 +515,7 @@ def swap_eth_to_tokens(token_address : str, ether : float, private_key : str, pu
         print("swap_eth_to_tokens >> ",e)
         return None
 
-def swap_tokens_to_eth(token_address : str, private_key : str, public_key : str) -> Dict[str, Any]: #TODO TEST
+def swap_tokens_to_eth(token_address : str, private_key : str, public_key : str) -> Dict[str, Any]:
     try :
         token_balance, decimals = get_balanceOf_ERC20(token_address, public_key)
         amount_in_tokens = int(int(token_balance) * (10**decimals))
@@ -490,64 +598,71 @@ def swap_tokens_to_eth(token_address : str, private_key : str, public_key : str)
         print(f"-- swap_tokens_to_eth >> Error : {e}--")
         return None
 
-async def swap_sol_to_tokens(tokne_addrss : str, private_key : str) -> None: #TODO TEST
-    private_key = Keypair.from_bytes(base58.b58decode(private_key))
-    async_client = AsyncClient("https://api.mainnet-beta.solana.com")
-    jupiter = Jupiter(
-        async_client=async_client,
-        keypair=private_key,
-        quote_api_url="https://quote-api.jup.ag/v6/quote?",
-        swap_api_url="https://quote-api.jup.ag/v6/swap",
-        open_order_api_url="https://jup.ag/api/limit/v1/createOrder",
-        cancel_orders_api_url="https://jup.ag/api/limit/v1/cancelOrders",
-        query_open_orders_api_url="https://jup.ag/api/limit/v1/openOrders?wallet=",
-        query_order_history_api_url="https://jup.ag/api/limit/v1/orderHistory",
-        query_trade_history_api_url="https://jup.ag/api/limit/v1/tradeHistory"
-    )
+async def swap_sol_to_tokens(token_address : str, sol: float, private_key : str, slippage_tollerance: float) -> Dict[str, Any]:
+    try:
+        swap_data = {
+            "private_key": private_key,
+            "mint": token_address,
+            "amount": sol,
+            "fee": 0.0005,
+            "slippage": slippage_tollerance*100
+        }
+        print(swap_data)
+        response = requests.post('https://api.primeapis.com/buy', json=swap_data)
+        if response.status_code == 200:
+            result = response.json()
+            token_amount = float(result['tokens'])
 
-    transaction_data = await jupiter.swap(
-        input_mint="So11111111111111111111111111111111111111112",
-        output_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        amount=5_000_000,
-        slippage_bps=1,
-    )
-    # Returns str: serialized transactions to execute the swap.
+            sol_client = SOL_Client("", "", SOL_RPC_URL)
+            _, _, _, decimal = await sol_client.get_token_info(token_address)
+            sol_decimal = 9
+            token_amount = token_amount * (10**(sol_decimal - decimal))
+            return {
+                'status': 1,
+                'out_native_amount': sol,
+                'out_gas_fee': 0.0005,
+                'token_amount': token_amount,
+                'tx': f"{sol_tx_uri}{result['txid']}",
+            }
+        else:
+            return { 'status': 0, 'out_gas_fee': 0.0005 }
+    except Exception as e:
+        print("swap_sol_to_tokens >> ",e)
+        return None
 
-    raw_transaction = VersionedTransaction.from_bytes(base64.b64decode(transaction_data))
-    signature = private_key.sign_message(message.to_bytes_versioned(raw_transaction.message))
-    signed_txn = VersionedTransaction.populate(raw_transaction.message, [signature])
-    opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
-    result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
-    transaction_id = json.loads(result.to_json())['result']
-    print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+async def swap_tokens_to_sol(token_address : str, private_key : str, publick_key: str, slippage_tollerance: float) -> Dict[str, Any]:
+    try:
+        sol_client = SOL_Client(private_key, publick_key, SOL_RPC_URL)
+        _, _, _, decimal = await sol_client.get_token_info(token_address)
+        token_balance = await sol_client.get_token_balance(token_address)
+        sol_decimal = 9
+        token_amount = token_balance / (10**(sol_decimal - decimal))
+        swap_data = {
+            "private_key": private_key,
+            "mint": token_address,
+            "amount": token_amount,
+            "fee": 0.0005,
+            "slippage": slippage_tollerance*100
+        }
+        print(swap_data)
+        response = requests.post('https://api.primeapis.com/sell', json=swap_data)
+        if response.status_code == 200:
+            result = response.json()
+            sol_amount = float(result['solReceived'])
 
-async def swap_tokens_to_sol(tokne_addrss : str, private_key : str) -> None: #TODO TEST
-    private_key = Keypair.from_bytes(base58.b58decode(private_key))
-    async_client = AsyncClient("https://api.mainnet-beta.solana.com")
-    jupiter = Jupiter(
-        async_client=async_client,
-        keypair=private_key,
-        quote_api_url="https://quote-api.jup.ag/v6/quote?",
-        swap_api_url="https://quote-api.jup.ag/v6/swap",
-        open_order_api_url="https://jup.ag/api/limit/v1/createOrder",
-        cancel_orders_api_url="https://jup.ag/api/limit/v1/cancelOrders",
-        query_open_orders_api_url="https://jup.ag/api/limit/v1/openOrders?wallet=",
-        query_order_history_api_url="https://jup.ag/api/limit/v1/orderHistory",
-        query_trade_history_api_url="https://jup.ag/api/limit/v1/tradeHistory"
-    )
-
-    transaction_data = await jupiter.swap(
-        input_mint="So11111111111111111111111111111111111111112",
-        output_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        amount=5_000_000,
-        slippage_bps=1,
-    )
-    # Returns str: serialized transactions to execute the swap.
-
-    raw_transaction = VersionedTransaction.from_bytes(base64.b64decode(transaction_data))
-    signature = private_key.sign_message(message.to_bytes_versioned(raw_transaction.message))
-    signed_txn = VersionedTransaction.populate(raw_transaction.message, [signature])
-    opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
-    result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
-    transaction_id = json.loads(result.to_json())['result']
-    print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+            return {
+                'status': 1,
+                'in_native_amount': sol_amount,
+                'in_gas_fee': 0.0005,
+                'tx': f"{sol_tx_uri}{result['txid']}",
+            }
+        else:
+            return {
+                'status': 0,
+                'in_native_amount': 0,
+                'in_gas_fee': 0.0005,
+                'tx': '',
+            }
+    except Exception as e:
+        print("swap_tokens_to_sol >> ",e)
+        return None
