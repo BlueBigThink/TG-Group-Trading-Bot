@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 import asyncio
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-CHANNEL_ID = os.getenv('CHANNEL_ID')
+
 ######################################################################################
 ################################ 1. MnemonicManager ##################################
 ######################################################################################
@@ -103,6 +103,11 @@ class UserManager():
     def __init__(self) -> None:
         self.owner_eth_wallet = ''
         self.owner_sol_wallet = ''
+        self.group_id = -1
+
+    def set_group_id(self, group_id: int) -> None:
+        if self.group_id == -1:
+            self.group_id = group_id
 
     def set_owner_wallet(self, eth_wallet : str, sol_wallet : str) -> None:
         self.owner_eth_wallet = eth_wallet
@@ -295,7 +300,7 @@ class UserManager():
 
     def send_message_group(self, message : str) -> None:
         try :
-            txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={CHANNEL_ID}&text={message}&parse_mode=HTML&disable_web_page_preview=True"
+            txt_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={self.group_id}&text={message}&parse_mode=HTML&disable_web_page_preview=True"
             print(txt_url)
             requests.get(txt_url)
         except Exception as e:
@@ -387,7 +392,8 @@ class UserManager():
                     self._add_profit_by_contribution(contribution, token_type, in_native_amount)
                     trade.buy_sell_status = 0
                     # name, _, _ = get_token_name_symbol_decimals(sell_token_addr)
-                    message = f"<b>✅ Selled {token_symbol}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                    # message = f"<b>✅ Selled {token_symbol}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                    message = f"<b>✅ Sell {token_symbol} <a href='{swap_res['tx']}'>transaction</a> succeeded\n{sell_token_addr}\n\n💰 You Gained {format_float(in_native_amount, 4)} {token_type} \n\nGroup Gained {format_float(in_native_amount - trade.out_native_amount, 5)} {token_type}</b>"
                 else:
                     self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
                     trade.buy_sell_status = -1
@@ -414,7 +420,7 @@ class UserManager():
                     in_native_amount = swap_res['in_native_amount']
                     self._add_profit_by_contribution(contribution, token_type, in_native_amount)
                     trade.buy_sell_status = 0
-                    message = f"<b>✅ Selled {token_symbol}\n{sell_token_addr}\nGet Back {format_float(in_native_amount, 4)} {token_type}\n{swap_res['tx']}</b>"
+                    message = f"<b>✅ Sell {token_symbol} <a href='{swap_res['tx']}'>transaction</a> succeeded\n{sell_token_addr}\n\n💰 You Gained {format_float(in_native_amount, 4)} {token_type} \n\nGroup Gained {format_float(in_native_amount - trade.out_native_amount, 5)} {token_type}</b>"
                 else:
                     self._change_deposit_by_contribution(contribution, token_type, -in_gas_fee)
                     trade.buy_sell_status = -1

@@ -49,9 +49,13 @@ logging.basicConfig(
 )
 # logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# def format_float(value, decimals):
+#     formatted_value = f"{value:.{decimals}f}".rstrip('0').rstrip('.')
+#     return formatted_value
 def format_float(value, decimals):
-    formatted_value = f"{value:.{decimals}f}".rstrip('0').rstrip('.')
-    return formatted_value
+    stepper = 10.0 ** decimals
+    truncated_value = int(value * stepper) / stepper
+    return f"{truncated_value:.{decimals}f}"
 def format_string(s):
     return s[:20].ljust(20)
 mnemonicManager = MnemonicManager()
@@ -77,7 +81,12 @@ g_UserStatus = {}
 #                        start (Entry Point)                           #
 ########################################################################
 async def start(update: Update, context: CallbackContext) -> None:
-    # chat_type = update.message.chat.type
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
+
+    userManager.set_group_id(update.message.chat.id)
     userInfo = update.message.from_user
     user_name = userInfo['username']
     user_id = userInfo['id']
@@ -123,6 +132,10 @@ async def start(update: Update, context: CallbackContext) -> None:
 #                                 +Lock                                #
 ########################################################################
 async def user_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -141,6 +154,10 @@ async def user_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 #                                 +Unlock                              #
 ########################################################################
 async def user_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -159,6 +176,10 @@ async def user_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 #                                 +Deposit                             #
 ########################################################################
 async def user_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -175,6 +196,10 @@ async def user_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 #                              +Balance                                #
 ########################################################################
 async def user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return    
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -187,14 +212,18 @@ async def user_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         f"<b>-------- {real_name} ---------\n💳 Balance\n"+
         f"Token      Deposit      Profit\n"+
         f"---------      ----------      ----------\n"+
-        f" ETH          {eth:.3f}          {profit_eth:.3f}\n"+
-        f" SOL          {sol:.3f}          {profit_sol:.3f}</b>",
+        f" ETH          {format_float(eth,3)}          {format_float(profit_eth,3)}\n"+
+        f" SOL          {format_float(sol,3)}          {format_float(profit_sol,3)}</b>",
         parse_mode=ParseMode.HTML
     )
 ########################################################################
 #                              +Users                                  #
 ########################################################################
 async def user_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     first_name = userInfo['first_name']
     last_name = userInfo['last_name']
@@ -217,6 +246,10 @@ async def user_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 #                              +Withdraw                               #
 ########################################################################
 async def user_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -234,8 +267,8 @@ async def user_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         f"<b>-------- {real_name} ---------\n⬆️ Withdraw\n"+
         f"Token      Deposit      Profit\n"+
         f"---------      ----------      ----------\n"+
-        f" ETH          {eth:.3f}          {profit_eth:.3f}\n"+
-        f" SOL          {sol:.3f}          {profit_sol:.3f}\n"+
+        f" ETH          {format_float(eth,3)}          {format_float(profit_eth,3)}\n"+
+        f" SOL          {format_float(sol,3)}          {format_float(profit_sol,3)}\n"+
         f"👇 Please select token to withdraw</b>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -259,8 +292,8 @@ async def _user_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TY
         f"<b>-------- {real_name} ---------\n⬆️ Withdraw\n"+
         f"Token      Deposit      Profit\n"+
         f"---------      ----------      ----------\n"+
-        f" ETH          {eth:.3f}          {profit_eth:.3f}\n"+
-        f" SOL          {sol:.3f}          {profit_sol:.3f}\n\n"+
+        f" ETH          {format_float(eth,3)}          {format_float(profit_eth,3)}\n"+
+        f" SOL          {format_float(sol,3)}          {format_float(profit_sol,3)}\n\n"+
         f"Please input {token_type} amount to withdraw</b>",
         parse_mode=ParseMode.HTML,
     )
@@ -331,6 +364,10 @@ async def _withdraw_handle_message(update: Update, context: ContextTypes.DEFAULT
 #                               +Invest                                #
 ########################################################################
 async def user_invest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
@@ -348,8 +385,8 @@ async def user_invest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         f"<b>-------- {real_name} ---------\n💵 Invest\n"+
         f"Token      Deposit      Profit\n"+
         f"---------      ----------      ----------\n"+
-        f" ETH          {eth:.3f}          {profit_eth:.3f}\n"+
-        f" SOL          {sol:.3f}          {profit_sol:.3f}\n"+
+        f" ETH          {format_float(eth,3)}          {format_float(profit_eth,3)}\n"+
+        f" SOL          {format_float(sol,3)}          {format_float(profit_sol,3)}\n"+
         f"👇 Please select token to invest</b>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -373,8 +410,8 @@ async def _user_invest_amount(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"<b>-------- {real_name} ---------\n💵 Invest\n"+
         f"Token      Deposit      Profit\n"+
         f"---------      ----------      ----------\n"+
-        f" ETH          {eth:.3f}          {profit_eth:.3f}\n"+
-        f" SOL          {sol:.3f}          {profit_sol:.3f}\n\n"+
+        f" ETH          {format_float(eth,3)}          {format_float(profit_eth,3)}\n"+
+        f" SOL          {format_float(sol,3)}          {format_float(profit_sol,3)}\n\n"+
         f"Please input {token_type} amount to invest</b>",
         parse_mode=ParseMode.HTML,
     )
@@ -422,6 +459,10 @@ async def _invest_handle_message(update: Update, context: ContextTypes.DEFAULT_T
 #                               +Trade                                 #
 ########################################################################
 async def user_trade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_type = update.message.chat.type
+    if chat_type  == 'private':
+        await update.message.reply_text('This bot is working in private group only!')
+        return
     userInfo = update.message.from_user
     user_id = userInfo['id']
     first_name = userInfo['first_name']
